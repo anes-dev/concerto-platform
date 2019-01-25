@@ -1,11 +1,11 @@
-version: '3.0'
+version: '2.0'
 services:
     database:
       image: mysql:5.7
       container_name: database
       restart: unless-stopped
-      ports:
-        - "3306:3306"
+      expose:
+        - "3306"
       environment:
         - MYSQL_ROOT_PASSWORD=root
         - MYSQL_DATABASE=concerto
@@ -20,6 +20,8 @@ services:
       image: campsych/concerto-platform:latest
       container_name: concerto
       restart: unless-stopped
+      links:
+        - "database"
       volumes:
         - ./concerto/config/parameters.yml:/usr/src/concerto/app/config/parameters.yml
         - ./concerto/config/parameters_administration.yml:/usr/src/concerto/app/config/parameters_administration.yml
@@ -40,5 +42,5 @@ services:
         - ./logs/concerto/php-fpm:/var/log/php-fpm
         - ./logs/concerto/app:/usr/src/concerto/var/logs
         - ./logs/concerto/sessions:/usr/src/concerto/src/Concerto/TestBundle/Resources/sessions
-      ports:
-        - "80:80"
+      expose:
+        - "80"
