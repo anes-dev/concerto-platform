@@ -1,0 +1,24 @@
+version: '3.0'
+
+services:
+	database:
+		image: mysql:5.7
+		container_name: database
+		
+		
+		
+	concerto:
+		depends_on:
+			- db
+		container_name: concertoweb
+		image:
+		restart: unless_stopped
+		volumes:
+			- 
+		environment:
+			VIRTUAL_HOST:
+			LETSENCRYPT_HOST:
+			LETSENCRYPT_EMAIL:
+
+
+		
