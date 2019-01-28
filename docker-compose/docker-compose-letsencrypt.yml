@@ -1,31 +1,31 @@
 version: '3.0'
 
 services:
-	database:
-		image: mysql:5.7
-		container_name: database
-		restart: unless-stopped
+  database:
+    image: mysql:5.7
+    container_name: database
+    restart: unless-stopped
         environment:                                                                  
-          - MYSQL_ROOT_PASSWORD=root                                                  
+          - MYSQL_ROOT_PASSWORD=root                
           - MYSQL_DATABASE=concerto                                                   
           - TZ=Americas/New York                                                          
         volumes:                                                                      
           - ./database/mysql:/var/lib/mysql                                           
           - ./database/conf/mysqld.cnf:/etc/mysql/conf.d/mysqld.cnf                   
-          - ./logs/database:/var/log/mysql  		  
-		  
-		
-		
-	concerto:
-		depends_on:
-			- database
-		container_name: concertoweb
-		image: campsych/concerto-platform:latest
-		restart: unless_stopped
-		environment:
-			VIRTUAL_HOST:
-			LETSENCRYPT_HOST:
-			LETSENCRYPT_EMAIL:
+          - ./logs/database:/var/log/mysql        
+      
+    
+    
+  concerto:
+    depends_on:
+      - database
+    container_name: concertoweb
+    image: campsych/concerto-platform:latest
+    restart: unless_stopped
+    environment:
+      VIRTUAL_HOST:
+      LETSENCRYPT_HOST:
+      LETSENCRYPT_EMAIL:
         volumes:
           - ./concerto/config/parameters.yml:/usr/src/concerto/app/config/parameters.yml
           - ./concerto/config/parameters_administration.yml:/usr/src/concerto/app/config/parameters_administration.yml
