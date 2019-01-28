@@ -4,7 +4,7 @@ services:
   database:
     image: mysql:5.7
     container_name: database
-    restart: unless_stopped
+    restart: always
     environment:                                                                  
       - MYSQL_ROOT_PASSWORD=root                
       - MYSQL_DATABASE=concerto                                                   
@@ -21,11 +21,11 @@ services:
       - database
     container_name: concertoweb
     image: campsych/concerto-platform:latest
-    restart: unless_stopped
+    restart: always
     environment:
-      VIRTUAL_HOST:
-      LETSENCRYPT_HOST:
-      LETSENCRYPT_EMAIL:
+      VIRTUAL_HOST: dash-dev.vm.duke.edu
+      LETSENCRYPT_HOST: dash-dev.vm.duke.edu
+      LETSENCRYPT_EMAIL: support@dash-dev.vm.duke.edu
     volumes:
       - ./concerto/config/parameters.yml:/usr/src/concerto/app/config/parameters.yml
       - ./concerto/config/parameters_administration.yml:/usr/src/concerto/app/config/parameters_administration.yml
@@ -46,4 +46,9 @@ services:
       - ./logs/concerto/php-fpm:/var/log/php-fpm
       - ./logs/concerto/app:/usr/src/concerto/var/logs
       - ./logs/concerto/sessions:/usr/src/concerto/src/Concerto/TestBundle/Resources/sessions
+
+networks:
+  default:
+   external:
+     name: webproxy
 
