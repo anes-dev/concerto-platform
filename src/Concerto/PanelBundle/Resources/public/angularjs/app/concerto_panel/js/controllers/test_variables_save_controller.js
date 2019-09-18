@@ -1,7 +1,6 @@
-function TestVariablesSaveController($scope, $uibModalInstance, $http, object) {
-    $scope.savePath = Paths.TEST_VARIABLE_SAVE;
-
+function TestVariablesSaveController($scope, $uibModalInstance, $http, object, test) {
     $scope.object = object;
+    $scope.test = test;
     $scope.dialogTitle = "";
     $scope.dialogSuccessfulMessage = "";
     $scope.editorOptions = Defaults.ckeditorPanelContentOptions;
@@ -40,19 +39,18 @@ function TestVariablesSaveController($scope, $uibModalInstance, $http, object) {
         var oid = $scope.object.id;
 
         var addModalDialog = $uibModalInstance;
-        $http.post($scope.savePath.pf(oid), $scope.object).success(function (data) {
-
-            switch (data.result) {
-                case BaseController.RESULT_OK:
-                {
+        $http.post(Paths.TEST_VARIABLE_SAVE.pf(oid),
+            angular.extend({}, $scope.object, {objectTimestamp: $scope.test.updatedOn})
+        ).then(function (httpResponse) {
+            switch (httpResponse.data.result) {
+                case BaseController.RESULT_OK: {
                     if (addModalDialog != null) {
                         addModalDialog.close($scope.object);
                     }
                     break;
                 }
-                case BaseController.RESULT_VALIDATION_FAILED:
-                {
-                    $scope.object.validationErrors = data.errors;
+                case BaseController.RESULT_VALIDATION_FAILED: {
+                    $scope.object.validationErrors = httpResponse.data.errors;
                     $(".modal").animate({scrollTop: 0}, "slow");
                     break;
                 }

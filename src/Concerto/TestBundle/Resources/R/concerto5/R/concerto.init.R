@@ -1,4 +1,4 @@
-concerto.init = function(connectionParams, publicDir, mediaUrl, maxExecTime, maxIdleTime, keepAliveToleranceTime, runnerType = 0){
+concerto.init = function(connectionParams, publicDir, mediaUrl, maxExecTime, maxIdleTime, keepAliveToleranceTime){
     options(digits.secs = 6)
     concerto.log("starting session")
     if(Sys.info()['sysname'] != "Windows") {
@@ -46,20 +46,15 @@ concerto.init = function(connectionParams, publicDir, mediaUrl, maxExecTime, max
 
     RUNNER_PERSISTENT <<- 0
     RUNNER_SERIALIZED <<- 1
-    RUNNER_CHECKPOINT <<- 2
 
     concerto <<- list()
     concerto$cache <<- list(tests=list(), templates=list(), tables=list())
-    concerto$promoted <<- list()
+    concerto$globals <<- list()
     concerto$templateParams <<- list()
     concerto$flow <<- list()
     concerto$bgWorkers <<- list()
     concerto$queuedResponse <<- NULL
     concerto$response <<- list()
-
-    #DEFAULTS START
-    concerto$promoted$template_def <<- "{\"layout\":\"default_layout\",\"header\":\"Your header goes here. For example, it could be a logo.\",\"footer\":\"Your footer goes here. For example, it could be a copyright sign. You might also have links to a privacy policy.\"}"
-    #DEFAULTS END
 
     concerto$publicDir <<- publicDir
     concerto$mediaUrl <<- mediaUrl
@@ -69,5 +64,4 @@ concerto.init = function(connectionParams, publicDir, mediaUrl, maxExecTime, max
     concerto$lastSubmitTime <<- as.numeric(Sys.time())
     concerto$lastKeepAliveTime <<- as.numeric(Sys.time())
     concerto$connectionParams <<- connectionParams
-    concerto$runnerType <<- runnerType
 }

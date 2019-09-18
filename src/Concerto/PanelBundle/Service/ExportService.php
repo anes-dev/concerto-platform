@@ -2,11 +2,10 @@
 
 namespace Concerto\PanelBundle\Service;
 
-class ExportService {
+use Symfony\Component\Yaml\Yaml;
 
-    const FORMAT_COMPRESSED = 'compressed';
-    const FORMAT_PLAINTEXT = 'text';
-
+class ExportService
+{
     private $dataTableService;
     private $testService;
     private $testNodeService;
@@ -20,7 +19,8 @@ class ExportService {
     private $version;
     public $serviceMap;
 
-    public function __construct(DataTableService $dataTableService, TestService $testService, TestNodeService $testNodeService, TestNodePortService $testNodePortService, TestNodeConnectionService $testNodeConnectionService, TestVariableService $testVariableService, TestWizardService $testWizardService, TestWizardStepService $testWizardStepService, TestWizardParamService $testWizardParamService, ViewTemplateService $viewTemplateService, $version) {
+    public function __construct(DataTableService $dataTableService, TestService $testService, TestNodeService $testNodeService, TestNodePortService $testNodePortService, TestNodeConnectionService $testNodeConnectionService, TestVariableService $testVariableService, TestWizardService $testWizardService, TestWizardStepService $testWizardStepService, TestWizardParamService $testWizardParamService, ViewTemplateService $viewTemplateService, $version)
+    {
         $this->dataTableService = $dataTableService;
         $this->testService = $testService;
         $this->testNodeService = $testNodeService;
@@ -47,92 +47,179 @@ class ExportService {
         );
     }
 
-    public function exportToFile($class, $object_ids, $format = self::FORMAT_COMPRESSED) {
-        $collection = array();
-        $object_ids = explode(",", $object_ids);
-        $dependencies = array();
-        $section_service = $this->serviceMap[$class];
-        foreach ($object_ids as $object_id) {
-            $entity = $section_service->get($object_id);
-            if (!$entity)
-                continue;
-            $entity->jsonSerialize($dependencies);
+    public function getInitialExportInstructions($class, $object_ids)
+    {
+        $instructions = array();
+        $collection = $this->getExportCollection($class, $object_ids);
+        foreach ($collection as $object) {
+            $data = '0';
+            $dataNum = "";
+            if ($object["class_name"] == "DataTable") {
+                $service = $this->serviceMap["DataTable"];
+                $data = '1';
+                $dataNum = $service->dbDataDao->countMatchingData($object["name"], null);
+            }
 
-            if (array_key_exists("ids", $dependencies)) {
-                foreach ($dependencies["ids"] as $k => $v) {
-                    $ids_service = $this->serviceMap[$k];
-                    foreach ($v as $id) {
-                        $ent = $ids_service->get($id);
-                        if ($ent)
-                            $ent->jsonSerialize($dependencies);
-                    }
+            $objectInstructions = array(
+                "id" => $object["id"],
+                "name" => $object["name"],
+                "class_name" => $object["class_name"],
+                "data" => $data,
+                "data_num" => $dataNum
+            );
+            array_push($instructions, $objectInstructions);
+        }
+        return $instructions;
+    }
+
+    public function addExportDependency($id, $sectionService, &$dependencies, $secure = true, &$normalizedIdsMap = null)
+    {
+        $entity = $sectionService->get($id, false, $secure);
+        if (!$entity)
+            return false;
+        $entity->jsonSerialize($dependencies, $normalizedIdsMap);
+
+        if (array_key_exists("ids", $dependencies)) {
+            foreach ($dependencies["ids"] as $className => $ids) {
+                $ids_service = $this->serviceMap[$className];
+                foreach ($ids as $id) {
+                    $ent = $ids_service->get($id, false, $secure);
+                    if ($ent)
+                        $ent->jsonSerialize($dependencies, $normalizedIdsMap);
                 }
             }
         }
-
-        if (array_key_exists("collection", $dependencies)) {
-            foreach ($dependencies["collection"] as $elem) {
-                $export_elem = $elem;
-                $elem_service = $this->serviceMap[$elem["class_name"]];
-                $elem_class = "\\Concerto\\PanelBundle\\Entity\\" . $elem["class_name"];
-                $export_elem["hash"] = $elem_class::getArrayHash($elem);
-                $export_elem = $elem_service->convertToExportable($export_elem);
-                array_push($collection, $export_elem);
-            }
-        }
-
-        $result = array("version" => $this->version, "collection" => $collection);
-        if ($format === self::FORMAT_COMPRESSED)
-            return gzcompress(json_encode($result, JSON_PRETTY_PRINT), 1);
-        else
-            return json_encode($result, JSON_PRETTY_PRINT);
+        return true;
     }
 
-    public function exportNodeToFile($object_ids, $format = ExportService::FORMAT_COMPRESSED) {
-        $object_ids = explode(",", $object_ids);
-        $dependencies = array();
-        foreach ($object_ids as $object_id) {
-            $node = $this->testNodeService->get($object_id);
+    public function convertCollectionToExportable($collection, $instructions, $secure = true, $addHash = true)
+    {
+        $result = array();
+        foreach ($collection as $elem) {
+            $export_elem = $elem;
+            $elem_service = $this->serviceMap[$elem["class_name"]];
+            $elem_class = "\\Concerto\\PanelBundle\\Entity\\" . $elem["class_name"];
+            if ($addHash) {
+                $export_elem["hash"] = $elem_class::getArrayHash($elem);
+            }
 
-            $test = $node->getSourceTest();
-            if ($node->getTitle() != "")
-                $test->setName($node->getTitle());
-            foreach ($node->getPorts() as $port) {
-                foreach ($test->getVariables() as $var) {
-                    if ($port->getVariable()->getId() == $var->getId()) {
-                        $var->setValue($port->getValue());
+            $elemInstruction = null;
+            if ($instructions !== null) {
+                foreach ($instructions as $instruction) {
+                    if ($instruction["class_name"] == $elem["class_name"] && array_key_exists("id", $instruction) && $instruction["id"] == $elem["id"]) {
+                        $elemInstruction = $instruction;
+                        break;
+                    }
+                    if ($instruction["class_name"] == $elem["class_name"] && array_key_exists("name", $instruction) && $instruction["name"] == $elem["name"]) {
+                        $elemInstruction = $instruction;
                         break;
                     }
                 }
             }
-            $test->jsonSerialize($dependencies);
-        }
 
-        if (array_key_exists("ids", $dependencies)) {
-            foreach ($dependencies["ids"] as $k => $v) {
-                $ids_service = $this->serviceMap[$k];
-                foreach ($v as $id) {
-                    $ids_service->get($id)->jsonSerialize($dependencies);
+            $export_elem = $elem_service->convertToExportable($export_elem, $elemInstruction, $secure);
+            if (in_array($elem["class_name"], array(
+                "DataTable",
+                "ViewTemplate"
+            ))) {
+                array_unshift($result, $export_elem);
+            } else {
+                array_push($result, $export_elem);
+            }
+        }
+        return $result;
+    }
+
+    private function getExportCollection($class, $object_ids, $instructions = null)
+    {
+        $dependencies = array();
+        $normalizedIdsMap = array();
+        $section_service = $this->serviceMap[$class];
+
+        if ($object_ids !== null) {
+            $object_ids = explode(",", $object_ids);
+            foreach ($object_ids as $object_id) {
+                $this->addExportDependency($object_id, $section_service, $dependencies, true, $normalizedIdsMap);
+            }
+        } else if ($instructions !== null) {
+            foreach ($instructions as $ins) {
+                if ($ins["class_name"] == $class) {
+                    $this->addExportDependency($ins["name"], $section_service, $dependencies, true, $normalizedIdsMap);
                 }
             }
         }
 
         $collection = array();
         if (array_key_exists("collection", $dependencies)) {
-            foreach ($dependencies["collection"] as $elem) {
-                $export_elem = $elem;
-                $elem_service = $this->serviceMap[$elem["class_name"]];
-                $elem_class = "\\Concerto\\PanelBundle\\Entity\\" . $elem["class_name"];
-                $export_elem["hash"] = $elem_class::getArrayHash($elem);
-                $export_elem = $elem_service->convertToExportable($export_elem);
-                array_push($collection, $export_elem);
-            }
+            $collection = $this->convertCollectionToExportable($dependencies["collection"], $instructions);
         }
-        $result = array("version" => $this->version, "collection" => $collection);
-        if ($format === ExportService::FORMAT_COMPRESSED)
-            return gzcompress(json_encode($result, JSON_PRETTY_PRINT), 1);
-        else
-            return json_encode($result, JSON_PRETTY_PRINT);
+        return $collection;
     }
 
+    public function exportToFile($class, $instructions, $format = "yml")
+    {
+        $collection = $this->getExportCollection($class, null, $instructions);
+
+        $result = array("version" => $this->version, "collection" => $collection);
+        switch ($format) {
+            case "json":
+                return json_encode($result, JSON_PRETTY_PRINT);
+            case "compressed":
+                return gzcompress(json_encode($result, JSON_PRETTY_PRINT), 1);
+            default: //yaml
+                return Yaml::dump($result, 100, 2, Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK);
+        }
+    }
+
+    public function decompactExportInstructions($compactInstructions)
+    {
+        $fullInstructions = [];
+        foreach ($compactInstructions as $class => $sets) {
+            for ($i = 0; $i < count($sets["id"]); $i++) {
+                $instruction = array(
+                    "class_name" => $class,
+                    "id" => $sets["id"][$i],
+                    "data" => $sets["data"][$i],
+                    "name" => $sets["name"][$i]
+                );
+                array_push($fullInstructions, $instruction);
+            }
+        }
+        return $fullInstructions;
+    }
+
+    public static function getTestCodeFilename($testArray)
+    {
+        $testName = $testArray["name"];
+        return "test/" . $testArray["name"] . "/" . $testArray["name"] . ".r";
+    }
+
+    public static function getPortValueFilename($testArray, $nodeArray, $portArray)
+    {
+        $testName = $testArray["name"];
+        $nodeName = preg_replace("/[^a-z0-9\.]/", "_", $nodeArray["title"]) . "_" . $nodeArray["id"];
+        $portName = $portArray["name"];
+
+        return "test/$testName/nodes/$nodeName/ports/$portName.r";
+    }
+
+    public static function getTemplateHtmlFilename($templateArray)
+    {
+        return "template/" . $templateArray["name"] . "/" . $templateArray["name"] . ".html";
+    }
+
+    public static function getTemplateCssFilename($templateArray)
+    {
+        return "template/" . $templateArray["name"] . "/" . $templateArray["name"] . ".css";
+    }
+
+    public static function getTemplateJsFilename($templateArray)
+    {
+        return "template/" . $templateArray["name"] . "/" . $templateArray["name"] . ".js";
+    }
+
+    public static function getTableDataFilename($tableArray)
+    {
+        return "table/" . $tableArray["name"] . ".yaml";
+    }
 }

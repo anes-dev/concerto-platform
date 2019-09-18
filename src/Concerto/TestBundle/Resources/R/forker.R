@@ -7,8 +7,7 @@ concerto5:::concerto.init(
     mediaUrl = commandArgs(TRUE)[3],
     maxExecTime = as.numeric(commandArgs(TRUE)[5]),
     maxIdleTime = as.numeric(commandArgs(TRUE)[6]),
-    keepAliveToleranceTime = as.numeric(commandArgs(TRUE)[7]),
-    runnerType = as.numeric(commandArgs(TRUE)[8])
+    keepAliveToleranceTime = as.numeric(commandArgs(TRUE)[7])
 )
 
 switch(concerto$connectionParams$driver,
@@ -20,7 +19,7 @@ switch(concerto$connectionParams$driver,
 
 concerto.log("starting listener")
 queue = c()
-unlink(paste0(commandArgs(TRUE)[1],"/*.fifo"))
+unlink(paste0(commandArgs(TRUE)[1],"*.fifo"))
 while (T) {
     fpath = ""
     if(length(queue) == 0) {
@@ -59,7 +58,11 @@ while (T) {
             workingDir = response$workingDir,
             client = response$client,
             sessionHash = response$sessionId,
-            response = response$response
+            maxIdleTime = response$maxIdleTime,
+            maxExecTime = response$maxExecTime,
+            response = response$response,
+            initialPort = response$initialPort,
+            runnerType = response$runnerType
         )
     }, detached = TRUE)
 }

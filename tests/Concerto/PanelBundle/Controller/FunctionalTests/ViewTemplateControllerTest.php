@@ -2,19 +2,23 @@
 
 namespace Tests\Concerto\PanelBundle\Controller\FunctionalTests;
 
+use Symfony\Component\Yaml\Yaml;
 use Tests\Concerto\PanelBundle\AFunctionalTest;
 use Concerto\PanelBundle\Entity\ATopEntity;
 
-class ViewTemplateControllerTest extends AFunctionalTest {
+class ViewTemplateControllerTest extends AFunctionalTest
+{
 
     private static $repository;
 
-    public static function setUpBeforeClass() {
+    public static function setUpBeforeClass()
+    {
         parent::setUpBeforeClass();
         self::$repository = static::$entityManager->getRepository("ConcertoPanelBundle:ViewTemplate");
     }
 
-    protected function setUp() {
+    protected function setUp()
+    {
         parent::setUp();
 
         $client = self::createLoggedClient();
@@ -33,7 +37,8 @@ class ViewTemplateControllerTest extends AFunctionalTest {
         $this->assertEquals(0, $content["result"]);
     }
 
-    public function testCollectionAction() {
+    public function testCollectionAction()
+    {
         $client = self::createLoggedClient();
 
         $client->request('POST', '/admin/ViewTemplate/collection');
@@ -54,13 +59,16 @@ class ViewTemplateControllerTest extends AFunctionalTest {
                 "starterContent" => false,
                 "owner" => null,
                 "groups" => "",
-                "accessibility" => ATopEntity::ACCESS_PUBLIC
+                "accessibility" => ATopEntity::ACCESS_PUBLIC,
+                "lockedBy" => null,
+                "directLockBy" => null
             )
         );
         $this->assertEquals($expected, json_decode($client->getResponse()->getContent(), true));
     }
 
-    public function testFormActionNew() {
+    public function testFormActionNew()
+    {
         $client = self::createLoggedClient();
 
         $crawler = $client->request("POST", "/admin/ViewTemplate/form/add");
@@ -68,7 +76,8 @@ class ViewTemplateControllerTest extends AFunctionalTest {
         $this->assertGreaterThan(0, $crawler->filter("input[type='text'][ng-model='object.name']")->count());
     }
 
-    public function testFormActionEdit() {
+    public function testFormActionEdit()
+    {
         $client = self::createLoggedClient();
 
         $crawler = $client->request("POST", "/admin/ViewTemplate/form/edit");
@@ -77,25 +86,39 @@ class ViewTemplateControllerTest extends AFunctionalTest {
         $this->assertGreaterThan(0, $crawler->filter("input[type='text'][ng-model='object.name']")->count());
     }
 
-    public function testDeleteAction() {
+    public function testDeleteAction()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/1/delete");
         $this->assertTrue($client->getResponse()->isSuccessful());
         $this->assertTrue($client->getResponse()->headers->contains("Content-Type", 'application/json'));
-        $this->assertEquals(array("result" => 0, "object_ids" => 1), json_decode($client->getResponse()->getContent(), true));
+        $this->assertEquals(array("result" => 0), json_decode($client->getResponse()->getContent(), true));
         $this->assertCount(0, self::$repository->findAll());
     }
 
     /**
      * @dataProvider exportDataProvider
      */
-    public function testExportAction($path_suffix, $use_gzip) {
+    public function testExportAction($instructions, $format)
+    {
         $client = self::createLoggedClient();
-        $client->request("POST", "/admin/ViewTemplate/1/export" . $path_suffix);
-        $content = json_decode(
-                ( $use_gzip ) ? gzuncompress($client->getResponse()->getContent()) : $client->getResponse()->getContent(), true
-        );
+        $encodedInstructions = json_encode($instructions);
+
+        $client->request("GET", "/admin/ViewTemplate/$encodedInstructions/export/$format");
+        $content = null;
+        switch ($format) {
+            case "yml":
+                $content = Yaml::parse($client->getResponse()->getContent());
+                break;
+            case "json":
+                $content = json_decode($client->getResponse()->getContent(), true);
+                break;
+            case "compressed":
+                $content = json_decode(gzuncompress($client->getResponse()->getContent()), true);
+                break;
+
+        }
 
         $this->assertArrayHasKey("hash", $content["collection"][0]);
         unset($content["collection"][0]["hash"]);
@@ -112,12 +135,9 @@ class ViewTemplateControllerTest extends AFunctionalTest {
                 "css" => "css",
                 "js" => "js",
                 "accessibility" => ATopEntity::ACCESS_PUBLIC,
-                "updatedOn" => $content["collection"][0]["updatedOn"],
                 "archived" => "0",
                 "starterContent" => false,
-                "owner" => null,
-                "groups" => "",
-                "updatedBy" => "admin"
+                "groups" => ""
             ),
         );
         $this->assertTrue($client->getResponse()->isSuccessful());
@@ -126,7 +146,8 @@ class ViewTemplateControllerTest extends AFunctionalTest {
         $this->assertEquals($expected, $content["collection"]);
     }
 
-    public function testImportNewAction() {
+    public function testImportNewAction()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/import", array(
@@ -150,7 +171,8 @@ class ViewTemplateControllerTest extends AFunctionalTest {
         $this->assertCount(2, self::$repository->findAll());
     }
 
-    public function testImportNewSameNameAction() {
+    public function testImportNewSameNameAction()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/import", array(
@@ -175,7 +197,8 @@ class ViewTemplateControllerTest extends AFunctionalTest {
         $this->assertCount(1, self::$repository->findBy(array("name" => "view_1")));
     }
 
-    public function testSaveActionNew() {
+    public function testSaveActionNew()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/-1/save", array(
@@ -202,12 +225,15 @@ class ViewTemplateControllerTest extends AFunctionalTest {
                 "starterContent" => false,
                 "owner" => null,
                 "groups" => "",
-                "accessibility" => ATopEntity::ACCESS_PUBLIC
+                "accessibility" => ATopEntity::ACCESS_PUBLIC,
+                "lockedBy" => null,
+                "directLockBy" => null
             )), json_decode($client->getResponse()->getContent(), true));
         $this->assertCount(2, self::$repository->findAll());
     }
 
-    public function testSaveActionRename() {
+    public function testSaveActionRename()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/1/save", array(
@@ -239,12 +265,15 @@ class ViewTemplateControllerTest extends AFunctionalTest {
                 "starterContent" => false,
                 "owner" => null,
                 "groups" => "",
-                "accessibility" => ATopEntity::ACCESS_PUBLIC
+                "accessibility" => ATopEntity::ACCESS_PUBLIC,
+                "lockedBy" => null,
+                "directLockBy" => null
             )), json_decode($client->getResponse()->getContent(), true));
         $this->assertCount(1, self::$repository->findAll());
     }
 
-    public function testSaveActionSameName() {
+    public function testSaveActionSameName()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/1/save", array(
@@ -276,12 +305,15 @@ class ViewTemplateControllerTest extends AFunctionalTest {
                 "starterContent" => false,
                 "owner" => null,
                 "groups" => "",
-                "accessibility" => ATopEntity::ACCESS_PUBLIC
+                "accessibility" => ATopEntity::ACCESS_PUBLIC,
+                "lockedBy" => null,
+                "directLockBy" => null
             )), json_decode($client->getResponse()->getContent(), true));
         $this->assertCount(1, self::$repository->findAll());
     }
 
-    public function testSaveActionNameAlreadyExists() {
+    public function testSaveActionNameAlreadyExists()
+    {
         $client = self::createLoggedClient();
 
         $client->request("POST", "/admin/ViewTemplate/-1/save", array(
@@ -308,7 +340,9 @@ class ViewTemplateControllerTest extends AFunctionalTest {
                 "starterContent" => false,
                 "owner" => null,
                 "groups" => "",
-                "accessibility" => ATopEntity::ACCESS_PUBLIC
+                "accessibility" => ATopEntity::ACCESS_PUBLIC,
+                "lockedBy" => null,
+                "directLockBy" => null
             )), json_decode($client->getResponse()->getContent(), true));
         $this->assertCount(2, self::$repository->findAll());
 
@@ -326,15 +360,34 @@ class ViewTemplateControllerTest extends AFunctionalTest {
             "result" => 1,
             "object" => null,
             "errors" => array("This name already exists in the system")
-                ), json_decode($client->getResponse()->getContent(), true));
+        ), json_decode($client->getResponse()->getContent(), true));
         $this->assertCount(2, self::$repository->findAll());
     }
 
-    public function exportDataProvider() {
+    public function exportDataProvider()
+    {
         return array(
-            array('', true), // default is gzipped 
-            array('/compressed', true), // explicitly requesting compression
-            array('/plaintext', false)    // requesting plaintext
+            array(array(
+                "ViewTemplate" => array(
+                    "id" => array(1),
+                    "name" => array("view"),
+                    "data" => array("0")
+                )
+            ), "yml"),
+            array(array(
+                "ViewTemplate" => array(
+                    "id" => array(1),
+                    "name" => array("view"),
+                    "data" => array("0")
+                )
+            ), "json"),
+            array(array(
+                "ViewTemplate" => array(
+                    "id" => array(1),
+                    "name" => array("view"),
+                    "data" => array("0")
+                )
+            ), "compressed")
         );
     }
 

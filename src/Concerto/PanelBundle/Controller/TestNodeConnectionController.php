@@ -2,14 +2,12 @@
 
 namespace Concerto\PanelBundle\Controller;
 
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Concerto\PanelBundle\Service\TestService;
 use Concerto\PanelBundle\Service\TestNodeConnectionService;
 use Concerto\PanelBundle\Service\TestNodeService;
 use Concerto\PanelBundle\Service\TestNodePortService;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Translation\TranslatorInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,9 +26,9 @@ class TestNodeConnectionController extends ASectionController
     private $testNodeService;
     private $testPortService;
 
-    public function __construct(EngineInterface $templating, TestService $testService, TestNodeConnectionService $connectionService, TestNodeService $nodeService, TestNodePortService $portService, TranslatorInterface $translator, TokenStorageInterface $securityTokenStorage)
+    public function __construct(EngineInterface $templating, TestService $testService, TestNodeConnectionService $connectionService, TestNodeService $nodeService, TestNodePortService $portService, TranslatorInterface $translator)
     {
-        parent::__construct($templating, $connectionService, $translator, $securityTokenStorage);
+        parent::__construct($templating, $connectionService, $translator);
 
         $this->entityName = self::ENTITY_NAME;
 
@@ -73,30 +71,34 @@ class TestNodeConnectionController extends ASectionController
     }
 
     /**
-     * @Route("/TestNodeConnection/{object_ids}/delete", name="TestNodeConnection_delete")
-     * @Method(methods={"POST"})
+     * @Route("/TestNodeConnection/{object_ids}/delete", name="TestNodeConnection_delete", methods={"POST"})
+     * @param Request $request
      * @param string $object_ids
      * @return Response
      */
-    public function deleteAction($object_ids)
+    public function deleteAction(Request $request, $object_ids)
     {
-        return parent::deleteAction($object_ids);
+        return parent::deleteAction($request, $object_ids);
     }
 
     /**
-     * @Route("/TestNodeConnection/{object_id}/save", name="TestNodeConnection_save")
-     * @Method(methods={"POST"})
+     * @Route("/TestNodeConnection/{object_id}/save", name="TestNodeConnection_save", methods={"POST"})
      * @param Request $request
      * @param $object_id
      * @return Response
      */
     public function saveAction(Request $request, $object_id)
     {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
         $sourcePort = $request->get("sourcePort");
         $destinationPort = $request->get("destinationPort");
 
         $result = $this->service->save(
-            $this->securityTokenStorage->getToken()->getUser(),
             $object_id,
             $this->testService->get($request->get("flowTest")),
             $this->testNodeService->get($request->get("sourceNode")),

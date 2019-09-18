@@ -4,11 +4,9 @@ namespace Concerto\PanelBundle\Controller;
 
 use Concerto\PanelBundle\Service\FileService;
 use Concerto\PanelBundle\Service\ViewTemplateService;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Translation\TranslatorInterface;
 use Concerto\PanelBundle\Service\ImportService;
 use Concerto\PanelBundle\Service\ExportService;
@@ -16,21 +14,17 @@ use Concerto\PanelBundle\Service\UserService;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\Response;
 
-/**
- * @Route("/admin")
- * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
- */
 class ViewTemplateController extends AExportableTabController
 {
 
     const ENTITY_NAME = "ViewTemplate";
-    const EXPORT_FILE_PREFIX = "ViewTemplate_";
+    const EXPORT_FILE_PREFIX = "ViewTemplate";
 
     private $userService;
 
-    public function __construct($environment, EngineInterface $templating, ViewTemplateService $service, TranslatorInterface $translator, TokenStorageInterface $securityTokenStorage, ImportService $importService, ExportService $exportService, UserService $userService, FileService $fileService)
+    public function __construct($environment, EngineInterface $templating, ViewTemplateService $service, TranslatorInterface $translator, ImportService $importService, ExportService $exportService, UserService $userService, FileService $fileService)
     {
-        parent::__construct($environment, $templating, $service, $translator, $securityTokenStorage, $importService, $exportService, $fileService);
+        parent::__construct($environment, $templating, $service, $translator, $importService, $exportService, $fileService);
 
         $this->entityName = self::ENTITY_NAME;
         $this->exportFilePrefix = self::EXPORT_FILE_PREFIX;
@@ -39,7 +33,8 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/fetch/{object_id}/{format}", name="ViewTemplate_object", defaults={"format":"json"})
+     * @Route("/admin/ViewTemplate/fetch/{object_id}/{format}", name="ViewTemplate_object", defaults={"format":"json"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param $object_id
      * @param string $format
      * @return Response
@@ -50,7 +45,8 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/collection/{format}", name="ViewTemplate_collection", defaults={"format":"json"})
+     * @Route("/admin/ViewTemplate/collection/{format}", name="ViewTemplate_collection", defaults={"format":"json"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param string $format
      * @return Response
      */
@@ -60,7 +56,20 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/form/{action}", name="ViewTemplate_form", defaults={"action":"edit"})
+     * @Route("/admin/ViewTemplate/{object_id}/toggleLock", name="ViewTemplate_toggleLock")
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
+     * @param Request $request
+     * @param $object_id
+     * @return Response
+     */
+    public function toggleLock(Request $request, $object_id)
+    {
+        return parent::toggleLock($request, $object_id);
+    }
+
+    /**
+     * @Route("/admin/ViewTemplate/form/{action}", name="ViewTemplate_form", defaults={"action":"edit"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param string $action
      * @param array $params
      * @return Response
@@ -71,16 +80,21 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/{object_id}/save", name="ViewTemplate_save")
-     * @Method(methods={"POST"})
+     * @Route("/admin/ViewTemplate/{object_id}/save", name="ViewTemplate_save", methods={"POST"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param Request $request
      * @param $object_id
      * @return Response
      */
     public function saveAction(Request $request, $object_id)
     {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
         $result = $this->service->save(
-            $this->securityTokenStorage->getToken()->getUser(),
             $object_id,
             $request->get("name"),
             $request->get("description"),
@@ -96,7 +110,8 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/{object_id}/copy", name="ViewTemplate_copy")
+     * @Route("/admin/ViewTemplate/{object_id}/copy", name="ViewTemplate_copy")
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param Request $request
      * @param $object_id
      * @return Response
@@ -107,30 +122,43 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/{object_ids}/delete", name="ViewTemplate_delete")
-     * @Method(methods={"POST"})
+     * @Route("/admin/ViewTemplate/{object_ids}/delete", name="ViewTemplate_delete", methods={"POST"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
+     * @param Request $request
      * @param string $object_ids
      * @return Response
      */
-    public function deleteAction($object_ids)
+    public function deleteAction(Request $request, $object_ids)
     {
-        return parent::deleteAction($object_ids);
+        return parent::deleteAction($request, $object_ids);
     }
 
     /**
-     * @Route("/ViewTemplate/{object_ids}/export/{format}", name="ViewTemplate_export", defaults={"format":"compressed"})
-     * @param string $object_ids
+     * @Route("/admin/ViewTemplate/{instructions}/export/{format}", name="ViewTemplate_export", defaults={"format":"yml"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
+     * @param string $instructions
      * @param string $format
      * @return Response
      */
-    public function exportAction($object_ids, $format = ExportService::FORMAT_COMPRESSED)
+    public function exportAction($instructions, $format = "yml")
     {
-        return parent::exportAction($object_ids, $format);
+        return parent::exportAction($instructions, $format);
     }
 
     /**
-     * @Route("/ViewTemplate/import", name="ViewTemplate_import")
-     * @Method(methods={"POST"})
+     * @Route("/admin/ViewTemplate/{object_ids}/instructions/export", name="ViewTemplate_export_instructions")
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
+     * @param $object_ids
+     * @return Response
+     */
+    public function exportInstructionsAction($object_ids)
+    {
+        return parent::exportInstructionsAction($object_ids);
+    }
+
+    /**
+     * @Route("/admin/ViewTemplate/import", name="ViewTemplate_import", methods={"POST"})
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param Request $request
      * @return Response
      */
@@ -140,12 +168,46 @@ class ViewTemplateController extends AExportableTabController
     }
 
     /**
-     * @Route("/ViewTemplate/import/status", name="ViewTemplate_pre_import_status")
+     * @Route("/admin/ViewTemplate/import/status", name="ViewTemplate_pre_import_status")
+     * @Security("has_role('ROLE_TEMPLATE') or has_role('ROLE_SUPER_ADMIN')")
      * @param Request $request
      * @return Response
      */
     public function preImportStatusAction(Request $request)
     {
         return parent::preImportStatusAction($request);
+    }
+
+    /**
+     * @Route("/ViewTemplate/{id}/content", name="ViewTemplate_content", methods={"GET"})
+     * @param Request $request
+     * @param string $id
+     * @return Response
+     */
+    public function contentAction(Request $request, $id)
+    {
+        $showHtml = true;
+        $showCss = true;
+        $showJs = true;
+
+        $htmlOverride = $request->get("html");
+        if ($htmlOverride !== null) $showHtml = $htmlOverride == 1;
+        $cssOverride = $request->get("css");
+        if ($cssOverride !== null) $showCss = $cssOverride == 1;
+        $jsOverride = $request->get("js");
+        if ($jsOverride !== null) $showJs = $jsOverride == 1;
+
+        $template = $this->service->get($id, false, false);
+        if ($template === null) {
+            return new Response('', 404);
+        }
+
+        $content = "";
+        if ($showCss) {
+            $content .= "<style>" . $template->getCss() . "</style>";
+        }
+        if ($showHtml) $content .= $template->getHtml();
+        if ($showJs) $content .= "<script>" . $template->getJs() . "</script>";
+        return new Response($content, 200);
     }
 }

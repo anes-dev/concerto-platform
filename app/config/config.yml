@@ -1,5 +1,5 @@
 parameters:
-    version: "5.0.beta.7.4"
+    version: "5.0.2"
     available_locales:
         en_GB: english
         zh_CN: 中文
@@ -59,30 +59,19 @@ doctrine:
             local:
                 driver:      "%database_driver%"
                 server_version: "%database_version%"
-                host:        "%database_host%"
-                port:        "%database_port%"
-                dbname:      "%database_name%"
-                user:        "%database_user%"
-                password:    "%database_password%"
+                host:        "%env(DB_HOST)%"
+                port:        "%env(DB_PORT)%"
+                dbname:      "%env(DB_NAME)%"
+                user:        "%env(DB_USER)%"
+                password:    "%env(DB_PASSWORD)%"
                 charset:     UTF8
                 path:        "%database_path%"
                 unix_socket: "%database_unix_socket%"
-                options:
-                    #PDO::MYSQL_ATTR_INIT_COMMAND
-                    1002: "SET sql_mode=''"
 
     orm:
         auto_generate_proxy_classes: "%kernel.debug%"
         #naming_strategy: doctrine.orm.naming_strategy.underscore
         auto_mapping: true
-
-# Swiftmailer Configuration
-swiftmailer:
-    transport: "%mailer_transport%"
-    host:      "%mailer_host%"
-    username:  "%mailer_user%"
-    password:  "%mailer_password%"
-    spool:     { type: memory }
 
 fos_oauth_server:
     db_driver:           orm

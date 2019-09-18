@@ -2,11 +2,9 @@
 
 namespace Concerto\PanelBundle\Controller;
 
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Concerto\PanelBundle\Service\UserService;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Translation\TranslatorInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
@@ -21,9 +19,9 @@ class UserController extends ASectionController
 
     const ENTITY_NAME = "User";
 
-    public function __construct(EngineInterface $templating, UserService $service, TranslatorInterface $translator, TokenStorageInterface $securityTokenStorage)
+    public function __construct(EngineInterface $templating, UserService $service, TranslatorInterface $translator)
     {
-        parent::__construct($templating, $service, $translator, $securityTokenStorage);
+        parent::__construct($templating, $service, $translator);
 
         $this->entityName = self::ENTITY_NAME;
     }
@@ -61,8 +59,7 @@ class UserController extends ASectionController
     }
 
     /**
-     * @Route("/User/{object_id}/save", name="User_save")
-     * @Method(methods={"POST"})
+     * @Route("/User/{object_id}/save", name="User_save", methods={"POST"})
      * @param Request $request
      * @param $object_id
      * @return Response
@@ -70,7 +67,6 @@ class UserController extends ASectionController
     public function saveAction(Request $request, $object_id)
     {
         $result = $this->service->save(
-            $this->securityTokenStorage->getToken()->getUser(),
             $object_id,
             $request->get("accessibility"),
             $request->get("archived") === "1",
@@ -91,13 +87,13 @@ class UserController extends ASectionController
     }
 
     /**
-     * @Route("/User/{object_ids}/delete", name="User_delete")
-     * @Method(methods={"POST"})
+     * @Route("/User/{object_ids}/delete", name="User_delete", methods={"POST"})
+     * @param Request $request
      * @param $object_ids
      * @return Response
      */
-    public function deleteAction($object_ids)
+    public function deleteAction(Request $request, $object_ids)
     {
-        return parent::deleteAction($object_ids);
+        return parent::deleteAction($request, $object_ids);
     }
 }

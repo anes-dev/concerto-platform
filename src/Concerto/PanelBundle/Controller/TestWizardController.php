@@ -4,12 +4,10 @@ namespace Concerto\PanelBundle\Controller;
 
 use Concerto\PanelBundle\Service\FileService;
 use Concerto\PanelBundle\Service\TestService;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Concerto\PanelBundle\Service\TestWizardService;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Translation\TranslatorInterface;
 use Concerto\PanelBundle\Service\ImportService;
 use Concerto\PanelBundle\Service\ExportService;
@@ -25,14 +23,14 @@ class TestWizardController extends AExportableTabController
 {
 
     const ENTITY_NAME = "TestWizard";
-    const EXPORT_FILE_PREFIX = "TestWizard_";
+    const EXPORT_FILE_PREFIX = "TestWizard";
 
     private $testService;
     private $userService;
 
-    public function __construct($environment, EngineInterface $templating, TestWizardService $service, TranslatorInterface $translator, TokenStorageInterface $securityTokenStorage, TestService $testService, ImportService $importService, ExportService $exportService, UserService $userService, FileService $fileService)
+    public function __construct($environment, EngineInterface $templating, TestWizardService $service, TranslatorInterface $translator, TestService $testService, ImportService $importService, ExportService $exportService, UserService $userService, FileService $fileService)
     {
-        parent::__construct($environment, $templating, $service, $translator, $securityTokenStorage, $importService, $exportService, $fileService);
+        parent::__construct($environment, $templating, $service, $translator, $importService, $exportService, $fileService);
 
         $this->entityName = self::ENTITY_NAME;
         $this->exportFilePrefix = self::EXPORT_FILE_PREFIX;
@@ -63,6 +61,17 @@ class TestWizardController extends AExportableTabController
     }
 
     /**
+     * @Route("/TestWizard/{object_id}/toggleLock", name="TestWizard_toggleLock")
+     * @param Request $request
+     * @param $object_id
+     * @return Response
+     */
+    public function toggleLock(Request $request, $object_id)
+    {
+        return parent::toggleLock($request, $object_id);
+    }
+
+    /**
      * @Route("/TestWizard/form/{action}", name="TestWizard_form", defaults={"action":"edit"})
      * @param string $action
      * @param array $params
@@ -74,16 +83,20 @@ class TestWizardController extends AExportableTabController
     }
 
     /**
-     * @Route("/TestWizard/{object_id}/save", name="TestWizard_save")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizard/{object_id}/save", name="TestWizard_save", methods={"POST"})
      * @param Request $request
      * @param $object_id
      * @return Response
      */
     public function saveAction(Request $request, $object_id)
     {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
         $result = $this->service->save(
-            $this->securityTokenStorage->getToken()->getUser(),
             $object_id,
             $request->get("name"),
             $request->get("description"),
@@ -98,8 +111,7 @@ class TestWizardController extends AExportableTabController
     }
 
     /**
-     * @Route("/TestWizard/{object_id}/copy", name="TestWizard_copy")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizard/{object_id}/copy", name="TestWizard_copy", methods={"POST"})
      * @param Request $request
      * @param $object_id
      * @return Response
@@ -110,30 +122,39 @@ class TestWizardController extends AExportableTabController
     }
 
     /**
-     * @Route("/TestWizard/{object_ids}/delete", name="TestWizard_delete")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizard/{object_ids}/delete", name="TestWizard_delete", methods={"POST"})
+     * @param Request $request
      * @param string $object_ids
      * @return Response
      */
-    public function deleteAction($object_ids)
+    public function deleteAction(Request $request, $object_ids)
     {
-        return parent::deleteAction($object_ids);
+        return parent::deleteAction($request, $object_ids);
     }
 
     /**
-     * @Route("/TestWizard/{object_ids}/export/{format}", name="TestWizard_export", defaults={"format":"compressed"})
-     * @param $object_ids
+     * @Route("/TestWizard/{instructions}/export/{format}", name="TestWizard_export", defaults={"format":"yml"})
+     * @param string $instructions
      * @param string $format
      * @return Response
      */
-    public function exportAction($object_ids, $format = ExportService::FORMAT_COMPRESSED)
+    public function exportAction($instructions, $format = "yml")
     {
-        return parent::exportAction($object_ids, $format);
+        return parent::exportAction($instructions, $format);
     }
 
     /**
-     * @Route("/TestWizard/import", name="TestWizard_import")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizard/{object_ids}/instructions/export", name="TestWizard_export_instructions")
+     * @param $object_ids
+     * @return Response
+     */
+    public function exportInstructionsAction($object_ids)
+    {
+        return parent::exportInstructionsAction($object_ids);
+    }
+
+    /**
+     * @Route("/TestWizard/import", name="TestWizard_import", methods={"POST"})
      * @param Request $request
      * @return Response
      */

@@ -11,6 +11,15 @@
 {% block elements %}
     {% embed "ConcertoPanelBundle::form_h_element.html.twig" %}
         {% trans_default_domain "Administration" %}
+        {% block label %}{{ 'form.settings.api_enabled'|trans }}{% endblock %}
+        {% block tooltip %}{{ 'form.settings.api_enabled.tooltip'|trans }}{% endblock %}
+        {% block control %}
+            <input type="checkbox" ng-disabled="!exposedSettingsMap.api_enabled_overridable" ng-model="exposedSettingsMap.api_enabled" ng-true-value="'1'" ng-false-value="'0'">
+        {% endblock %}
+    {% endembed %}
+
+    {% embed "ConcertoPanelBundle::form_h_element.html.twig" %}
+        {% trans_default_domain "Administration" %}
         {% block label %}{{ 'form.settings.session_limit'|trans }}{% endblock %}
         {% block tooltip %}{{'form.settings.session_limit.tooltip'|trans}}{% endblock %}
         {% block control %}
@@ -20,16 +29,27 @@
 
     {% embed "ConcertoPanelBundle::form_h_element.html.twig" %}
         {% trans_default_domain "Administration" %}
-        {% block label %}{{ 'form.settings.api_enabled'|trans }}{% endblock %}
-        {% block tooltip %}{{'form.settings.api_enabled.tooltip'|trans}}{% endblock %}
+        {% block label %}{{ 'form.settings.session_runner_service'|trans }}{% endblock %}
+        {% block tooltip %}{{'form.settings.session_runner_service.tooltip'|trans}}{% endblock %}
         {% block control %}
-            <input type="checkbox" ng-disabled="!exposedSettingsMap.api_enabled_overridable" ng-model="exposedSettingsMap.api_enabled" ng-true-value="'1'" ng-false-value="'0'">
+            <select ng-disabled="!exposedSettingsMap.session_runner_service_overridable" ng-model="exposedSettingsMap.session_runner_service" style="width:100%;" class='form-control'>
+                <option value="PersistantSessionRunnerService">Persistent</option>
+                <option value="SerializedSessionRunnerService">Serialized</option>
+            </select>
         {% endblock %}
     {% endembed %}
 
 {% endblock %}
 
 {% block sections %}
+    <uib-accordion-group is-open="tabAccordion.content.open">
+        <uib-accordion-heading>
+            <i class="glyphicon glyphicon-info-sign" uib-tooltip-html="'{{ 'content.fieldset.legend.tooltip'|trans }}'"></i>
+            {{ 'content.fieldset.legend'|trans }}
+            <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': tabAccordion.content.open, 'glyphicon-chevron-right': !tabAccordion.content.open}"></i>
+        </uib-accordion-heading>
+        {{ include("ConcertoPanelBundle:Administration:content_section.html.twig", {'class_name':"Administration"}) }}
+    </uib-accordion-group>
     <uib-accordion-group is-open="tabAccordion.messages.open">
         <uib-accordion-heading>
             <i class="glyphicon glyphicon-info-sign" uib-tooltip-html="'{{ 'messages.fieldset.legend.tooltip'|trans }}'"></i>
@@ -53,14 +73,6 @@
             <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': tabAccordion.packages.open, 'glyphicon-chevron-right': !tabAccordion.packages.open}"></i>
         </uib-accordion-heading>
         {{ include("ConcertoPanelBundle:Administration:packages_section.html.twig", {'class_name':"Administration"}) }}
-    </uib-accordion-group>
-    <uib-accordion-group is-open="tabAccordion.tasks.open" ng-show="tasksEnabled">
-        <uib-accordion-heading>
-            <i class="glyphicon glyphicon-info-sign" uib-tooltip-html="'{{ 'tasks.fieldset.legend.tooltip'|trans }}'"></i>
-            {{ 'tasks.fieldset.legend'|trans }}
-            <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': tabAccordion.tasks.open, 'glyphicon-chevron-right': !tabAccordion.tasks.open}"></i>
-        </uib-accordion-heading>
-        {{ include("ConcertoPanelBundle:Administration:tasks_section.html.twig", {'class_name':"Administration"}) }}
     </uib-accordion-group>
     <uib-accordion-group is-open="tabAccordion.apiClients.open">
         <uib-accordion-heading>

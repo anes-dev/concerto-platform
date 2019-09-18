@@ -6,15 +6,15 @@ concertoPanel.factory('AdministrationSettingsService', function ($http) {
         exposedSettingsMap: {},
         starterContentEditable: false,
         fetchSettingsMap: function (params, callback) {
-            var obj = this;
+            let obj = this;
             $http({
                 url: obj.settingsMapPath,
                 method: "GET",
                 params: params
-            }).success(function (response) {
-                obj.internalSettingsMap = response.internal;
-                obj.exposedSettingsMap = response.exposed;
-                obj.starterContentEditable = response.internal.editable_starter_content == "1";
+            }).then(function (response) {
+                obj.internalSettingsMap = response.data.internal;
+                obj.exposedSettingsMap = response.data.exposed;
+                obj.starterContentEditable = response.data.internal.editable_starter_content == "1";
                 obj.settingsMapInitialized = true;
                 if (callback)
                     callback.call(this);

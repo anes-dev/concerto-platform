@@ -6,6 +6,7 @@ use Concerto\PanelBundle\DAO\DBDataDAO;
 use Concerto\PanelBundle\Entity\DataTable;
 use Concerto\PanelBundle\Repository\DataTableRepository;
 use Concerto\PanelBundle\Entity\User;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -16,9 +17,9 @@ class DataTableService extends AExportableSectionService
     public $dbDataDao;
     private $testWizardParamService;
 
-    public function __construct(DataTableRepository $repository, ValidatorInterface $validator, DBStructureService $dbStructureService, DBDataDAO $dbDataDao, AuthorizationCheckerInterface $securityAuthorizationChecker, TestWizardParamService $testWizardParamService)
+    public function __construct(DataTableRepository $repository, ValidatorInterface $validator, DBStructureService $dbStructureService, DBDataDAO $dbDataDao, AuthorizationCheckerInterface $securityAuthorizationChecker, TestWizardParamService $testWizardParamService, TokenStorageInterface $securityTokenStorage)
     {
-        parent::__construct($repository, $validator, $securityAuthorizationChecker);
+        parent::__construct($repository, $validator, $securityAuthorizationChecker, $securityTokenStorage);
 
         $this->dbStructureService = $dbStructureService;
         $this->dbDataDao = $dbDataDao;
@@ -46,22 +47,23 @@ class DataTableService extends AExportableSectionService
         return $object;
     }
 
-    public function save(User $user, $object_id, $name, $description, $accessibility, $archived, $owner, $groups)
+    public function save($object_id, $name, $description, $accessibility, $archived, $owner, $groups)
     {
+        $user = null;
+        $token = $this->securityTokenStorage->getToken();
+        if ($token !== null) $user = $token->getUser();
+
         $errors = array();
         $object = $this->get($object_id);
         $new = false;
-        $old_name = null;
+        $oldName = null;
         if ($object !== null) {
-            $old_name = $object->getName();
+            $oldName = $object->getName();
         } else {
             $new = true;
             $object = new DataTable();
             $object->setOwner($user);
         }
-        $object->setUpdated();
-        if ($user !== null)
-            $object->setUpdatedBy($user->getUsername());
         $object->setName($name);
         if ($description !== null) {
             $object->setDescription($description);
@@ -83,23 +85,51 @@ class DataTableService extends AExportableSectionService
 
         if ($new) {
             $errors = $this->dbStructureService->createDefaultTable($name);
-        } else if ($old_name != $name) {
-            $errors = $this->dbStructureService->renameTable($old_name, $name);
+        } else if ($oldName != $name) {
+            $errors = $this->dbStructureService->renameTable($oldName, $name);
         }
         if (count($errors) > 0) {
             return array("object" => null, "errors" => $errors);
         }
 
-        $this->repository->save($object);
-        $this->onObjectSaved($user, $object, $new, $old_name);
+        $this->update($object, $oldName);
         return array("object" => $object, "errors" => $errors);
     }
 
-    private function onObjectSaved(User $user, DataTable $object, $new, $oldName)
+    public function update(DataTable $obj, $oldName = null, $flush = true)
     {
-        if (!$new && $oldName != $object->getName()) {
-            $this->testWizardParamService->onObjectRename($user, $object, $oldName);
+        $user = null;
+        $token = $this->securityTokenStorage->getToken();
+        if ($token !== null) $user = $token->getUser();
+
+        $obj->setUpdated();
+        $obj->setUpdatedBy($user);
+        $isNew = $obj->getId() === null;
+        $this->repository->save($obj, $flush);
+
+        $isRenamed = !$isNew && $oldName !== null && $oldName !== $obj->getName();
+        if ($isRenamed) {
+            $this->onObjectRenamed($obj, $oldName);
         }
+    }
+
+    private function onObjectRenamed(DataTable $object, $oldName)
+    {
+        $this->testWizardParamService->onObjectRename($object, $oldName);
+    }
+
+    public function convertToExportable($array, $instruction = null, $secure = true)
+    {
+        $array = parent::convertToExportable($array, $instruction, $secure);
+
+        if ($instruction !== null) {
+            //include data
+            if (array_key_exists("data", $instruction) && $instruction["data"] == 2) {
+                $array["data"] = $this->getFilteredData($array["name"], false, null, $secure);
+            }
+        }
+
+        return $array;
     }
 
     public function delete($object_ids, $secure = true)
@@ -140,9 +170,9 @@ class DataTableService extends AExportableSectionService
         }
     }
 
-    public function getFilteredData($object_id, $prefixed = false, $filters = null)
+    public function getFilteredData($object_id, $prefixed = false, $filters = null, $secure = true)
     {
-        $object = $this->get($object_id);
+        $object = $this->get($object_id, false, $secure);
         if ($object != null) {
             $data = $this->dbDataDao->fetchMatchingData($object->getName(), $filters);
             if ($prefixed) {
@@ -222,6 +252,7 @@ class DataTableService extends AExportableSectionService
             foreach ($names as $n) {
                 $this->dbStructureService->removeColumn($object->getName(), trim($n));
             }
+            $this->update($object);
         }
         return array();
     }
@@ -239,6 +270,7 @@ class DataTableService extends AExportableSectionService
             foreach ($ids as $id) {
                 $this->dbDataDao->removeRow($object->getName(), $id);
             }
+            $this->update($object);
         }
         return array();
     }
@@ -247,7 +279,19 @@ class DataTableService extends AExportableSectionService
     {
         $object = $this->get($object_id);
         if ($object != null) {
-            $this->dbDataDao->truncate($object->getName());
+            $this->update($object);
+            return $this->dbDataDao->truncate($object->getName());
+        } else {
+            return array();
+        }
+    }
+
+    public function deleteAll($object_id)
+    {
+        $object = $this->get($object_id);
+        if ($object != null) {
+            $this->update($object);
+            return $this->dbDataDao->deleteAll($object->getName());
         } else {
             return array();
         }
@@ -257,6 +301,7 @@ class DataTableService extends AExportableSectionService
     {
         $object = $this->get($object_id);
         if ($object != null) {
+            $this->update($object);
             return $this->dbStructureService->saveColumn($object->getName(), $column_name, $new_name, $new_type);
         } else {
             return array();
@@ -267,6 +312,7 @@ class DataTableService extends AExportableSectionService
     {
         $object = $this->get($object_id);
         if ($object != null) {
+            $this->update($object);
             return $this->dbDataDao->addBlankRow($object->getName());
         } else {
             return array();
@@ -283,6 +329,7 @@ class DataTableService extends AExportableSectionService
                     unset($values[$k]);
                 }
             }
+            $this->update($object);
             return $this->dbDataDao->updateRow($object->getName(), $row_id, $values);
         } else {
             return array();
@@ -362,6 +409,7 @@ class DataTableService extends AExportableSectionService
             }
         }
         $this->dbDataDao->flushInsertBatch($batch);
+        $this->update($table);
         return array();
     }
 
@@ -394,14 +442,11 @@ class DataTableService extends AExportableSectionService
         }
     }
 
-    public function convertToExportable($array)
-    {
-        return $array;
-    }
-
-    public function importFromArray(User $user, $instructions, $obj, &$map, &$queue, $secure = true)
+    public function importFromArray($instructions, $obj, &$map, &$renames, &$queue, $secure = true)
     {
         $pre_queue = array();
+        if (!array_key_exists("DataTable", $renames))
+            $renames["DataTable"] = array();
         if (!array_key_exists("DataTable", $map))
             $map["DataTable"] = array();
         if (array_key_exists("id" . $obj["id"], $map["DataTable"]))
@@ -411,21 +456,56 @@ class DataTableService extends AExportableSectionService
 
         $instruction = self::getObjectImportInstruction($obj, $instructions);
         $old_name = $instruction["existing_object_name"];
-        $new_name = $this->getNextValidName($this->formatImportName($user, $instruction["rename"], $obj), $instruction["action"], $old_name);
+        $new_name = $this->getNextValidName($this->formatImportName($instruction["rename"], $obj), $instruction["action"], $old_name);
+        if ($instruction["action"] != 2 && $old_name != $new_name) {
+            $renames["DataTable"][$old_name] = $new_name;
+        }
+
         $result = array();
         $src_ent = $this->findConversionSource($obj, $map);
         if ($instruction["action"] == 1 && $src_ent) {
-            $result = $this->importConvert($user, $new_name, $src_ent, $obj, $map, $queue);
+            $result = $this->importConvert($new_name, $src_ent, $obj, $map, $queue);
+            if (array_key_exists("clean", $instruction) && $instruction["clean"] == 1) $this->cleanConvert($result["entity"], $obj);
         } else if ($instruction["action"] == 2 && $src_ent) {
             $map["DataTable"]["id" . $obj["id"]] = $src_ent;
             $result = array("errors" => null, "entity" => $src_ent);
         } else
-            $result = $this->importNew($user, $new_name, $obj, $map, $queue);
+            $result = $this->importNew($new_name, $obj, $map, $queue);
+
+        if ($instruction["action"] != 2 && array_key_exists("data", $instruction) && $instruction["data"] == 2) {
+            $this->dbDataDao->truncate($new_name);
+            if (array_key_exists("data", $obj)) {
+                $batch = null;
+                foreach ($obj["data"] as $row) {
+                    $batch = $this->dbDataDao->addInsertBatch($new_name, $row, $batch);
+                }
+                $this->dbDataDao->flushInsertBatch($batch);
+            }
+        }
+
         return $result;
     }
 
-    protected function importNew(User $user, $new_name, $obj, &$map, &$queue)
+    private function cleanConvert(DataTable $entity, $importArray)
     {
+        foreach ($entity->getColumns() as $currentColumn) {
+            $found = false;
+            foreach ($importArray["columns"] as $importColumn) {
+                if ($currentColumn["name"] == $importColumn["name"]) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) $this->dbStructureService->removeColumn($entity->getName(), $currentColumn["name"]);
+        }
+    }
+
+    protected function importNew($new_name, $obj, &$map, &$queue)
+    {
+        $user = null;
+        $token = $this->securityTokenStorage->getToken();
+        if ($token !== null) $user = $token->getUser();
+
         $starter_content = $obj["name"] == $new_name ? $obj["starterContent"] : false;
 
         $ent = new DataTable();
@@ -446,7 +526,7 @@ class DataTableService extends AExportableSectionService
         if (count($db_errors) > 0)
             return array("errors" => $db_errors, "entity" => null, "source" => $obj);
 
-        $this->repository->save($ent, false);
+        $this->update($ent, null, false);
         $map["DataTable"]["id" . $obj["id"]] = $ent;
 
         return array("errors" => null, "entity" => $ent);
@@ -457,8 +537,12 @@ class DataTableService extends AExportableSectionService
         return $this->get($obj["name"]);
     }
 
-    protected function importConvert(User $user, $new_name, $src_ent, $obj, &$map, &$queue)
+    protected function importConvert($new_name, $src_ent, $obj, &$map, &$queue)
     {
+        $user = null;
+        $token = $this->securityTokenStorage->getToken();
+        if ($token !== null) $user = $token->getUser();
+
         $old_ent = clone $src_ent;
         $ent = $src_ent;
         $ent->setName($new_name);
@@ -501,16 +585,9 @@ class DataTableService extends AExportableSectionService
             }
         }
 
-        $this->repository->save($ent, false);
+        $this->update($ent, $old_ent->getName(), false);
         $map["DataTable"]["id" . $obj["id"]] = $ent;
-
-        $this->onConverted($user, $ent, $old_ent);
 
         return array("errors" => null, "entity" => $ent);
     }
-
-    protected function onConverted($user, $new_ent, $old_ent)
-    {
-    }
-
 }

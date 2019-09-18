@@ -4,10 +4,10 @@
             {% trans_default_domain "TestWizard" %}
             {% block setter %}
                 <select ng-model="output" ng-change="onPrimitiveValueChange(output)"
-                        ng-disabled="wizardObject.starterContent && !administrationSettingsService.starterContentEditable"
-                        ng-options="template.name as template.name for template in viewTemplateCollectionService.collection | filter : {'archived':'!1'} | orderBy: 'name'"
+                        ng-disabled="!editable"
                         class='form-control'>
                     <option value="">{{ "none.choosen"|trans({},"panel") }}</option>
+                    <option ng-repeat="template in viewTemplateCollectionService.collection | filter : {'archived':'!1'} | orderBy: 'name'" ng-value="template.name" ng-bind="template.name"></option>
                 </select>
             {% endblock %}
         {% endembed %}

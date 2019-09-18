@@ -54,7 +54,6 @@ form:
     cancel: İptal
     yes: Evet
     no: Hayır
-    change: Değiştir
     ok: Tamam
     apply: Uygula
     upload: Yükle
@@ -100,7 +99,6 @@ import:
         description_warning: Seçili nesneleri yeni içeri aktarılanlarla değiştirme özelliği henüz deneysel olarak çalışmaktadır ve veri kaybına yol açabilir. İki nesne arasındaki farkları kaçınılmaz bir veri kaybına neden olması olasıdır. Devam etmeden veritabanınızı yedeklemeniz önemle tavsiye edilir.
         message:
             imported: Nesne içe aktarıldı
-            incompatible_version: Aktarım dosyası eski bir sürümle oluşturulmuş ve bu Concerto Platform sürümüyle kullanılamaz!
     fieldset:
         legend.tooltip: Daha önce dışa aktarılmış dosyadan yeni nesneler içe aktarın.
     form:
@@ -112,13 +110,8 @@ import:
 
 export:
     dialog:
-        title: Veri dışarı aktar
         error:
             empty.content: Lütfen, dışarı aktarmak için aşağıdaki tablodan en az bir girdiyi işaretleyin.
-        format:
-            info: Lüfen dışa aktarılacak dosya biçmini seçin. Sıkıştırılmış format daha az disk alanı ve bant genişliğine ihtiyaç duyar, fakat kolayca açılamaz. Metin formatını düzenlemek ve görüntülemek kolaydır ancak daha büyük dosyalar oluşturur.
-            compressed: sıkıştırılmış
-            plaintext: metin
      
 download_list:
     dialog:

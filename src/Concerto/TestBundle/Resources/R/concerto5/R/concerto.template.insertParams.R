@@ -1,5 +1,6 @@
 concerto.template.insertParams = function(html,params=list(),removeMissing=T){
-  matches <- unlist(regmatches(html,gregexpr("\\{\\{[^\\}\\}]*\\}\\}",html)))
+  insertRegex = "\\{\\{[^(\\}\\})|(\\{\\{)]*\\}\\}"
+  matches <- unlist(regmatches(html,gregexpr(insertRegex,html)))
   offset = 0
   while(length(matches)>offset){
     index <- 1
@@ -7,12 +8,12 @@ concerto.template.insertParams = function(html,params=list(),removeMissing=T){
       value <- gsub("\\{\\{", "", matches[index])
       value <- gsub("\\}\\}", "", value)
       if(substring(value, 1, 9) == "template:") {
-        insert = concerto.template.join(templateId=substring(value,10), params=params)
-        if(Sys.info()['sysname'] == "Windows") {
-          if(Encoding(insert) == "UTF-8") { insert = enc2native(insert) }
-        }
+        insert = concerto.directive.template(substring(value,10), params)
         html <- gsub(matches[index], insert, html, fixed=TRUE)
-      } else if(!is.null(params[[value]])){
+      } else if(substring(value, 1, 6) == "trans:") {
+        insert = concerto.directive.trans(substring(value,7), params)
+        html <- gsub(matches[index], insert, html, fixed=TRUE)
+      } else if(!is.null(params[[value]]) && !is.na(params[[value]])){
         insert = as.character(params[[value]])
         if(Sys.info()['sysname'] == "Windows") {
             if(Encoding(insert) == "UTF-8") { insert = enc2native(insert) }
@@ -28,7 +29,7 @@ concerto.template.insertParams = function(html,params=list(),removeMissing=T){
       }
       index=index+1
     }
-    matches <- unlist(regmatches(html,gregexpr("\\{\\{[^\\}\\}]*\\}\\}",html)))
+    matches <- unlist(regmatches(html,gregexpr(insertRegex,html)))
   }
   return(html)
 }

@@ -2,13 +2,13 @@
 
 namespace Concerto\PanelBundle\Service;
 
-use Concerto\PanelBundle\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Yaml\Yaml;
 
 class ImportService
 {
 
-    const MIN_EXPORT_VERSION = "5.0.beta.2.167";
+    const MIN_EXPORT_VERSION = "5.0.beta.8.1";
 
     private $dataTableService;
     private $testService;
@@ -22,6 +22,7 @@ class ImportService
     private $viewTemplateService;
     private $queue;
     private $map;
+    private $renames;
     private $version;
     private $entityManager;
     public $serviceMap;
@@ -42,6 +43,7 @@ class ImportService
         $this->version = $version;
 
         $this->map = array();
+        $this->renames = array();
         $this->queue = array();
         $this->serviceMap = array(
             "DataTable" => $this->dataTableService,
@@ -95,9 +97,19 @@ class ImportService
     public function getImportFileContents($file, $unlink = true)
     {
         $file_content = file_get_contents($file);
-        $data = json_decode($file_content, true);
-        if (is_null($data)) {
-            $data = json_decode(gzuncompress($file_content), true);
+        $extension = pathinfo($file)["extension"];
+        $data = null;
+        switch ($extension) {
+            case "concerto":
+                $data = json_decode(gzuncompress($file_content), true);
+                break;
+            case "yml":
+            case "yaml":
+                $data = Yaml::parse($file_content);
+                break;
+            default:
+                $data = json_decode($file_content, true);
+                break;
         }
         unset($file_content);
         if ($unlink) {
@@ -164,6 +176,14 @@ class ImportService
                 $default_action = "2";
             else if ($existing_entity != null)
                 $default_action = "1";
+            $data = "0";
+            $data_num = 0;
+            if ($imported_object["class_name"] == "DataTable") {
+                $data = "1";
+                if (array_key_exists("data", $imported_object)) {
+                    $data_num = count($imported_object["data"]);
+                }
+            }
 
             $obj_status = array(
                 "id" => $imported_object["id"],
@@ -174,64 +194,176 @@ class ImportService
                 "starter_content" => $imported_object["starterContent"],
                 "existing_object" => $existing_entity ? true : false,
                 "existing_object_name" => $existing_entity ? $existing_entity->getName() : null,
-                "can_ignore" => $can_ignore
+                "can_ignore" => $can_ignore,
+                "data" => $data,
+                "data_num" => $data_num
             );
             array_push($result, $obj_status);
         }
         return $result;
     }
 
-    public function getPreImportStatusFromFile($file)
+    public function getPreImportStatusFromFile($file, &$errorMessages = null)
     {
         $data = $this->getImportFileContents($file, false);
         $valid = array_key_exists("version", $data) && $this->isVersionValid($data["version"]);
-        if (!$valid)
-            return array("result" => 2);
-        return array("result" => 0, "status" => $this->getPreImportStatus($data["collection"]));
+        if (!$valid) {
+            $errorMessages = ["import.incompatible_version"];
+            return false;
+        }
+
+        return $this->getPreImportStatus($data["collection"]);
     }
 
     public function reset()
     {
         $this->map = array();
+        $this->renames = array();
     }
 
-    public function importFromFile(User $user, $file, $instructions, $unlink = true)
+    public function importFromFile($file, $instructions, $unlink = true, &$errorMessages = null)
     {
+        $dir = pathinfo($file)["dirname"];
         $data = $this->getImportFileContents($file, $unlink);
         $valid = array_key_exists("version", $data) && $this->isVersionValid($data["version"]);
-        if (!$valid)
-            return array("result" => 2);
-        return $this->import($user, $instructions, $data["collection"]);
+        if (!$valid) {
+            $errorMessages = ["import.incompatible_version"];
+            return false;
+        }
+
+        if (!$this->canCollectionBeModified($data["collection"], $instructions, $errorMessages)) return false;
+
+        foreach ($data["collection"] as &$obj) {
+            $instruction = ASectionService::getObjectImportInstruction($obj, $instructions);
+            if (array_key_exists("src", $instruction) && $instruction["src"] == 1) {
+                $this->mergeExternalSource($obj, $dir . "/src");
+            }
+        }
+
+        return $this->import($instructions, $data["collection"], $errorMessages);
     }
 
-    public function import(User $user, $instructions, $data)
+    private function canCollectionBeModified($collection, $instructions, &$errorMessages)
     {
-        $result = array("result" => 0, "import" => array());
+        foreach ($collection as $object) {
+            /** @var AExportableSectionService $objectService */
+            $objectService = $this->serviceMap[$object["class_name"]];
+            $instruction = $objectService::getObjectImportInstruction($object, $instructions);
+            //if convert
+            if ($instruction["action"] == 1 && !$objectService->canBeModified($object["name"], time(), $errorMessages)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private function mergeExternalSource(&$obj, $srcDir)
+    {
+        switch ($obj["class_name"]) {
+            case "Test":
+            {
+                //code based
+                if ($obj["type"] == 0 && $obj["code"] === null) {
+                    $path = $srcDir . "/" . ExportService::getTestCodeFilename($obj);
+                    if (file_exists($path)) {
+                        $value = file_get_contents($path);
+                        if ($value !== false) {
+                            $obj["code"] = $value;
+                        }
+                    }
+                }
+
+                //ports
+                foreach ($obj["nodes"] as &$node) {
+                    foreach ($node["ports"] as &$port) {
+                        //only input ports
+                        if ($port["type"] == 0 && $port["value"] === null) {
+                            $path = $srcDir . "/" . ExportService::getPortValueFilename($obj, $node, $port);
+                            if (file_exists($path)) {
+                                $value = file_get_contents($path);
+                                if ($value !== false) {
+                                    $port["value"] = $value;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+            case "ViewTemplate":
+            {
+                //css
+                if ($obj["css"] === null) {
+                    $path = $srcDir . "/" . ExportService::getTemplateCssFilename($obj);
+                    if (file_exists($path)) {
+                        $value = file_get_contents($path);
+                        if ($value !== false) {
+                            $obj["css"] = $value;
+                        }
+                    }
+                }
+                //js
+                if ($obj["js"] === null) {
+                    $path = $srcDir . "/" . ExportService::getTemplateJsFilename($obj);
+                    if (file_exists($path)) {
+                        $value = file_get_contents($path);
+                        if ($value !== false) {
+                            $obj["js"] = $value;
+                        }
+                    }
+                }
+                //html
+                if ($obj["html"] === null) {
+                    $path = $srcDir . "/" . ExportService::getTemplateHtmlFilename($obj);
+                    if (file_exists($path)) {
+                        $value = file_get_contents($path);
+                        if ($value !== false) {
+                            $obj["html"] = $value;
+                        }
+                    }
+                }
+                break;
+            }
+            case "DataTable":
+            {
+                //data
+                if (array_key_exists("data", $obj) && $obj["data"] === null) {
+                    $path = $srcDir . "/" . ExportService::getTableDataFilename($obj);
+                    if (file_exists($path)) {
+                        $obj["data"] = Yaml::parseFile($path);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    public function import($instructions, $data, &$errorMessages = null, &$lastTopObjectImported = null)
+    {
         $this->queue = $data;
         while (count($this->queue) > 0) {
             $obj = $this->queue[0];
             if (is_array($obj) && array_key_exists("class_name", $obj)) {
                 $service = $this->serviceMap[$obj["class_name"]];
-                $last_result = $service->importFromArray($user, $instructions, $obj, $this->map, $this->queue);
-                if (array_key_exists("errors", $last_result) && $last_result["errors"] != null) {
-                    array_push($result["import"], $last_result);
-                    $result["result"] = 1;
-                    return $result;
+                $lastResult = $service->importFromArray($instructions, $obj, $this->map, $this->renames, $this->queue);
+                if (array_key_exists("errors", $lastResult) && $lastResult["errors"] != null) {
+                    $errorMessages = $lastResult["errors"];
+                    return false;
                 }
-                if (array_key_exists("pre_queue", $last_result) && count($last_result["pre_queue"]) > 0) {
-                    $this->queue = array_merge($last_result["pre_queue"], $this->queue);
+                if (array_key_exists("pre_queue", $lastResult) && count($lastResult["pre_queue"]) > 0) {
+                    $this->queue = array_merge($lastResult["pre_queue"], $this->queue);
                 } else {
-                    array_push($result["import"], $last_result);
                     array_shift($this->queue);
                 }
+                if (in_array($obj["class_name"], ["DataTable", "Test", "TestWizard", "ViewTemplate"])) $lastTopObjectImported = $lastResult["entity"];
             }
         }
         $this->entityManager->flush();
         $this->reset();
-        return $result;
+        return true;
     }
 
-    public function copy($class_name, User $user, $object_id, $name)
+    public function copy($class_name, $object_id, $name, &$errorMessages = null, &$newObject = null)
     {
         $ent = $this->serviceMap[$class_name]->get($object_id);
         $dependencies = array();
@@ -241,7 +373,7 @@ class ImportService
         for ($i = 0; $i < count($collection); $i++) {
             $elem = $collection[$i];
             $elem_class = $elem["class_name"];
-            $collection[$i] = $this->serviceMap[$elem_class]->convertToExportable($elem);
+            $collection[$i] = $this->serviceMap[$elem_class]->convertToExportable($elem, array("data" => "2"));
         }
 
         $instructions = $this->getPreImportStatus($collection);
@@ -252,13 +384,14 @@ class ImportService
             } else {
                 $instructions[$i]["action"] = "2";
             }
+            $instructions[$i]["data"] = "2";
         }
-        $result = $this->import(
-            $user, //
-            json_decode(json_encode($instructions), true), //
-            $collection
+        return $this->import(
+            json_decode(json_encode($instructions), true),
+            $collection,
+            $errorMessages,
+            $newObject
         );
-        return $result;
     }
 
 }

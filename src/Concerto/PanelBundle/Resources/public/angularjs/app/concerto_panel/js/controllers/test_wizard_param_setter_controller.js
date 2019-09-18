@@ -1,11 +1,4 @@
-function TestWizardParamSetterController($scope, $uibModalInstance, param, output, parent, values, wizardObject, wizardMode) {
-
-    $scope.param = param;
-    $scope.output = output;
-    $scope.parent = parent;
-    $scope.values = values;
-    $scope.wizardObject = wizardObject;
-    $scope.wizardMode = wizardMode;
+function TestWizardParamSetterController($scope, $uibModalInstance) {
 
     $scope.change = function () {
         $uibModalInstance.close($scope.output);

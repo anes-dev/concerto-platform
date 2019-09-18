@@ -2,7 +2,9 @@
 
 var testRunner = angular.module('testRunner', [
     'ngSanitize',
-    'angularFileUpload'
+    'angularFileUpload',
+    'ngCookies',
+    'ng-html'
 ]).config(function ($httpProvider) {
     $httpProvider.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8';
     var param = function (obj) {
@@ -43,4 +45,19 @@ var testRunner = angular.module('testRunner', [
     testRunner.controllerProvider = $controllerProvider;
 }).config(function ($interpolateProvider) {
     $interpolateProvider.startSymbol('[[').endSymbol(']]');
+}).config(function ($compileProvider) {
+    testRunner.compileProvider = $compileProvider;
+}).config(function ($filterProvider) {
+    testRunner.filterProvider = $filterProvider;
 });
+
+testRunner.loadScripts = function (urls) {
+    urls.forEach(function (src) {
+        if ($("script[src='" + src + "']").length > 0) return;
+        var script = document.createElement('script');
+        script.type = "text/javascript";
+        script.async = false;
+        script.src = src;
+        document.head.appendChild(script);
+    });
+};

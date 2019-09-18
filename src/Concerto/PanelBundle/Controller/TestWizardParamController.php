@@ -2,7 +2,6 @@
 
 namespace Concerto\PanelBundle\Controller;
 
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Concerto\PanelBundle\Service\TestWizardService;
@@ -11,7 +10,6 @@ use Concerto\PanelBundle\Service\TestWizardParamService;
 use Concerto\PanelBundle\Service\TestWizardStepService;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Translation\TranslatorInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 
@@ -28,9 +26,9 @@ class TestWizardParamController extends ASectionController
     private $testWizardStepService;
     private $testVariableService;
 
-    public function __construct(EngineInterface $templating, TestWizardParamService $service, TranslatorInterface $translator, TestVariableService $testVariableServce, TestWizardStepService $testWizardStepService, TestWizardService $testWizardService, TokenStorageInterface $securityTokenStorage)
+    public function __construct(EngineInterface $templating, TestWizardParamService $service, TranslatorInterface $translator, TestVariableService $testVariableServce, TestWizardStepService $testWizardStepService, TestWizardService $testWizardService)
     {
-        parent::__construct($templating, $service, $translator, $securityTokenStorage);
+        parent::__construct($templating, $service, $translator);
 
         $this->entityName = self::ENTITY_NAME;
         $this->testWizardService = $testWizardService;
@@ -85,27 +83,31 @@ class TestWizardParamController extends ASectionController
     }
 
     /**
-     * @Route("/TestWizardParam/{object_ids}/delete", name="TestWizardParam_delete")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizardParam/{object_ids}/delete", name="TestWizardParam_delete", methods={"POST"})
+     * @param Request $request
      * @param string $object_ids
      * @return Response
      */
-    public function deleteAction($object_ids)
+    public function deleteAction(Request $request, $object_ids)
     {
-        return parent::deleteAction($object_ids);
+        return parent::deleteAction($request, $object_ids);
     }
 
     /**
-     * @Route("/TestWizardParam/{object_id}/save", name="TestWizardParam_save")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizardParam/{object_id}/save", name="TestWizardParam_save", methods={"POST"})
      * @param Request $request
      * @param $object_id
      * @return Response
      */
     public function saveAction(Request $request, $object_id)
     {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
         $result = $this->service->save(
-            $this->securityTokenStorage->getToken()->getUser(),
             $object_id,
             $this->testVariableService->get($request->get("testVariable")),
             $request->get("label"),
@@ -122,13 +124,19 @@ class TestWizardParamController extends ASectionController
     }
 
     /**
-     * @Route("/TestWizardParam/TestWizard/{wizard_id}/clear", name="TestWizardParam_clear")
-     * @Method(methods={"POST"})
+     * @Route("/TestWizardParam/TestWizard/{wizard_id}/clear", name="TestWizardParam_clear", methods={"POST"})
+     * @param Request $request
      * @param $wizard_id
      * @return Response
      */
-    public function clearAction($wizard_id)
+    public function clearAction(Request $request, $wizard_id)
     {
+        if (!$this->service->canBeModified($wizard_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
         $this->service->clear($wizard_id);
         $response = new Response(json_encode(array("result" => 0)));
         $response->headers->set('Content-Type', 'application/json');

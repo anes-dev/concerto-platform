@@ -2,13 +2,11 @@
 
 namespace Concerto\PanelBundle\Controller;
 
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Concerto\PanelBundle\Service\TestService;
 use Concerto\PanelBundle\Service\TestNodeService;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Translation\TranslatorInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\Response;
@@ -24,9 +22,9 @@ class TestNodeController extends ASectionController
 
     private $testService;
 
-    public function __construct(EngineInterface $templating, TestNodeService $nodeService, TestService $testService, TranslatorInterface $translator, TokenStorageInterface $securityTokenStorage)
+    public function __construct(EngineInterface $templating, TestNodeService $nodeService, TestService $testService, TranslatorInterface $translator)
     {
-        parent::__construct($templating, $nodeService, $translator, $securityTokenStorage);
+        parent::__construct($templating, $nodeService, $translator);
 
         $this->entityName = self::ENTITY_NAME;
         $this->testService = $testService;
@@ -66,27 +64,31 @@ class TestNodeController extends ASectionController
     }
 
     /**
-     * @Route("/TestNode/{object_ids}/delete", name="TestNode_delete")
-     * @Method(methods={"POST"})
+     * @Route("/TestNode/{object_ids}/delete", name="TestNode_delete", methods={"POST"})
+     * @param Request $request
      * @param string $object_ids
      * @return Response
      */
-    public function deleteAction($object_ids)
+    public function deleteAction(Request $request, $object_ids)
     {
-        return parent::deleteAction($object_ids);
+        return parent::deleteAction($request, $object_ids);
     }
 
     /**
-     * @Route("/TestNode/{object_id}/save", name="TestNode_save")
-     * @Method(methods={"POST"})
+     * @Route("/TestNode/{object_id}/save", name="TestNode_save", methods={"POST"})
      * @param Request $request
      * @param $object_id
      * @return Response
      */
     public function saveAction(Request $request, $object_id)
     {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
         $result = $this->service->save(
-            $this->securityTokenStorage->getToken()->getUser(),
             $object_id,
             $request->get("type"),
             $request->get("posX"),
@@ -95,5 +97,58 @@ class TestNodeController extends ASectionController
             $this->testService->get($request->get("sourceTest")),
             $request->get("title"));
         return $this->getSaveResponse($result);
+    }
+
+    /**
+     * @Route("/TestNode/{object_id}/ports/expose", name="TestNode_expose_ports", methods={"POST"})
+     * @param Request $request
+     * @param $object_id
+     * @return Response
+     */
+    public function exposePorts(Request $request, $object_id)
+    {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
+        $this->service->exposePorts(
+            json_decode($request->get("exposedPorts"), true)
+        );
+        $response = new Response(json_encode(array("result" => 0)));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/TestNode/{object_id}/port/{type}/add", name="TestNode_add_dynamic_port", methods={"POST"})
+     * @param Request $request
+     * @param $object_id
+     * @param $type
+     * @return Response
+     */
+    public function addDynamicPort(Request $request, $object_id, $type)
+    {
+        if (!$this->service->canBeModified($object_id, $request->get("objectTimestamp"), $errorMessages)) {
+            $response = new Response(json_encode(array("result" => 1, "errors" => $this->trans($errorMessages))));
+            $response->headers->set('Content-Type', 'application/json');
+            return $response;
+        }
+
+        $result = $this->service->addDynamicPort(
+            $object_id,
+            $request->get("name"),
+            (integer)$type
+        );
+
+        $errors = $this->trans($result["errors"]);
+        $response = new Response(json_encode(array(
+            "result" => count($errors) > 0 ? 1 : 0,
+            "object" => $result["object"],
+            "errors" => $errors
+        )));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
     }
 }

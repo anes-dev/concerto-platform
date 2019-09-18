@@ -2,7 +2,9 @@
 
 namespace Concerto\PanelBundle\Controller;
 
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Method;
+use Concerto\PanelBundle\Entity\User;
+use Concerto\PanelBundle\Service\FileService;
+use Concerto\PanelBundle\Service\GitService;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Bundle\FrameworkBundle\Templating\EngineInterface;
 use Concerto\PanelBundle\Service\AdministrationService;
@@ -10,6 +12,7 @@ use Concerto\TestBundle\Service\TestSessionCountService;
 use Symfony\Component\HttpFoundation\Request;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Translation\TranslatorInterface;
 
 /**
  * @Route("/admin")
@@ -19,12 +22,18 @@ class AdministrationController
     private $templating;
     private $service;
     private $sessionCountService;
+    private $fileService;
+    private $gitService;
+    private $translator;
 
-    public function __construct(EngineInterface $templating, AdministrationService $service, TestSessionCountService $sessionCountService)
+    public function __construct(EngineInterface $templating, AdministrationService $service, TestSessionCountService $sessionCountService, FileService $fileService, GitService $gitService, TranslatorInterface $translator)
     {
         $this->templating = $templating;
         $this->service = $service;
         $this->sessionCountService = $sessionCountService;
+        $this->fileService = $fileService;
+        $this->gitService = $gitService;
+        $this->translator = $translator;
     }
 
     /**
@@ -36,7 +45,7 @@ class AdministrationController
         return $this->templating->renderResponse('ConcertoPanelBundle::collection.json.twig', array(
             'collection' => array(
                 "exposed" => $this->service->getExposedSettingsMap(),
-                "internal" => $this->service->getInternalSettingsMap(true)
+                "internal" => $this->service->getInternalSettingsMap()
             )
         ));
     }
@@ -54,8 +63,7 @@ class AdministrationController
     }
 
     /**
-     * @Route("/AdministrationSetting/map/update", name="AdministrationSetting_map_update")
-     * @Method(methods={"POST"})
+     * @Route("/AdministrationSetting/map/update", name="AdministrationSetting_map_update", methods={"POST"})
      * @Security("has_role('ROLE_SUPER_ADMIN')")
      * @param Request $request
      * @return Response
@@ -84,8 +92,7 @@ class AdministrationController
     }
 
     /**
-     * @Route("/AdministrationSetting/SessionCount/clear", name="AdministrationSetting_session_count_clear")
-     * @Method(methods={"POST"})
+     * @Route("/AdministrationSetting/SessionCount/clear", name="AdministrationSetting_session_count_clear", methods={"POST"})
      * @Security("has_role('ROLE_SUPER_ADMIN')")
      * @return Response
      */
@@ -135,62 +142,6 @@ class AdministrationController
         return $this->templating->renderResponse('ConcertoPanelBundle::collection.json.twig', array(
             'collection' => $this->service->getTasksCollection()
         ));
-    }
-
-    /**
-     * @Route("/Administration/ScheduledTask/backup", name="Administration_tasks_backup")
-     * @Security("has_role('ROLE_SUPER_ADMIN')")
-     * @return Response
-     */
-    public function taskBackupAction()
-    {
-        $return = $this->service->scheduleBackupTask($out, true);
-        $response = new Response(json_encode(array("result" => $return, "out" => $out)));
-        $response->headers->set('Content-Type', 'application/json');
-        return $response;
-    }
-
-    /**
-     * @Route("/Administration/ScheduledTask/restore", name="Administration_tasks_restore")
-     * @Security("has_role('ROLE_SUPER_ADMIN')")
-     * @return Response
-     */
-    public function taskRestoreAction()
-    {
-        $return = $this->service->scheduleRestoreTask($out, true);
-        $response = new Response(json_encode(array("result" => $return, "out" => $out)));
-        $response->headers->set('Content-Type', 'application/json');
-        return $response;
-    }
-
-    /**
-     * @Route("/Administration/ScheduledTask/content_upgrade", name="Administration_tasks_content_upgrade")
-     * @Security("has_role('ROLE_SUPER_ADMIN')")
-     * @param Request $request
-     * @return Response
-     */
-    public function taskContentUpgradeAction(Request $request)
-    {
-        $backup = $request->get("backup");
-        $return = $this->service->scheduleContentUpgradeTask($out, $backup, true);
-        $response = new Response(json_encode(array("result" => $return, "out" => $out)));
-        $response->headers->set('Content-Type', 'application/json');
-        return $response;
-    }
-
-    /**
-     * @Route("/Administration/ScheduledTask/platform_upgrade", name="Administration_tasks_platform_upgrade")
-     * @Security("has_role('ROLE_SUPER_ADMIN')")
-     * @param Request $request
-     * @return Response
-     */
-    public function taskPlatformUpgradeAction(Request $request)
-    {
-        $backup = $request->get("backup");
-        $return = $this->service->schedulePlatformUpgradeTask($out, $backup, true);
-        $response = new Response(json_encode(array("result" => $return, "out" => $out)));
-        $response->headers->set('Content-Type', 'application/json');
-        return $response;
     }
 
     /**
@@ -273,4 +224,260 @@ class AdministrationController
         return $response;
     }
 
+    /**
+     * @Route("/Administration/content/import", name="Administration_content_import")
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @param Request $request
+     * @return Response
+     */
+    public function importContentAction(Request $request)
+    {
+        $file = $request->get("file");
+        if ($file) {
+            $file = realpath($this->fileService->getPrivateUploadDirectory()) . "/" . $file;
+        }
+        $url = $request->get("url");
+        $instructions = $request->get("instructions");
+        $returnCode = $this->service->importContent($file ? $file : $url, $instructions, $output);
+        $response = new Response(json_encode(array("result" => $returnCode, "output" => $output)));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/content/export/{instructions}", name="Administration_content_export", defaults={"instructions"="[]"})
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @param string $instructions
+     * @return Response
+     */
+    public function exportContentAction($instructions = "[]")
+    {
+        $returnCode = $this->service->exportContent($instructions, $zipPath, $output);
+        if ($returnCode === 0) {
+            $response = new Response(file_get_contents($zipPath));
+            $response->headers->set('Content-Type', 'application/zip');
+            $response->headers->set('Content-Disposition', 'attachment; filename="export.concerto.zip"');
+            return $response;
+        } else {
+            $response = new Response($output, 500);
+            return $response;
+        }
+    }
+
+    /**
+     * @Route("/Administration/user", name="Administration_user")
+     * @return Response
+     */
+    public function getAuthUserAction()
+    {
+        $user = $this->service->getAuthorizedUser();
+
+        $content = array("user" => null);
+        if ($user) {
+            $content = array(
+                "user" => array(
+                    "id" => $user->getId(),
+                    "username" => $user->getUsername(),
+                    "role_super_admin" => $user->hasRoleName(User::ROLE_SUPER_ADMIN) ? 1 : 0,
+                    "role_test" => $user->hasRoleName(User::ROLE_TEST) ? 1 : 0,
+                    "role_template" => $user->hasRoleName(User::ROLE_TEMPLATE) ? 1 : 0,
+                    "role_table" => $user->hasRoleName(User::ROLE_TABLE) ? 1 : 0,
+                    "role_file" => $user->hasRoleName(User::ROLE_FILE) ? 1 : 0,
+                    "role_wizard" => $user->hasRoleName(User::ROLE_WIZARD) ? 1 : 0
+                )
+            );
+        }
+        $response = new Response(json_encode($content));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/enable", name="Administration_git_enable")
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @param Request $request
+     * @return Response
+     */
+    public function enableGitAction(Request $request)
+    {
+        $success = $this->gitService->enableGit(
+            $request->get("url"),
+            $request->get("branch"),
+            $request->get("login"),
+            $request->get("password"),
+            false,
+            $output
+        );
+
+        $response = new Response(json_encode(array("result" => $success ? 0 : 1, "output" => $output)));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/disable", name="Administration_git_disable")
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @param Request $request
+     * @return Response
+     */
+    public function disableGitAction(Request $request)
+    {
+        $success = $this->gitService->disableGit();
+
+        $response = new Response(json_encode(array("result" => $success ? 0 : 1)));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/status", name="Administration_git_status")
+     * @param Request $request
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @return Response
+     */
+    public function gitStatusAction(Request $request)
+    {
+        $exportInstructions = $request->get("exportInstructions");
+        $status = $this->gitService->getStatus($exportInstructions, $errorMessages);
+        $responseContent = [
+            "result" => $status === false ? 1 : 0,
+            "status" => $status === false ? null : $status,
+            "errors" => $status === false ? $this->trans($errorMessages) : null
+        ];
+
+        $response = new Response(json_encode($responseContent));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/diff/{sha}", name="Administration_git_diff")
+     * @param string|null $sha
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @return Response
+     */
+    public function gitDiffAction($sha)
+    {
+        $diff = $this->gitService->getDiff($sha, $errorMessages);
+        $responseContent = [
+            "result" => $diff === false ? 1 : 0,
+            "diff" => $diff === false ? null : $diff,
+            "errors" => $diff === false ? $this->trans($errorMessages) : null
+        ];
+
+        $response = new Response(json_encode($responseContent));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/commit", name="Administration_git_commit")
+     * @param Request $request
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @return Response
+     */
+    public function gitCommitAction(Request $request)
+    {
+        $commit = $this->gitService->commit(
+            $request->get("message"),
+            $output,
+            $errorMessages
+        );
+        $responseContent = [
+            "result" => $commit === false ? 1 : 0,
+            "output" => $output,
+            "errors" => $commit === false ? $this->trans($errorMessages) : null
+        ];
+
+        $response = new Response(json_encode($responseContent));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/reset", name="Administration_git_reset")
+     * @param Request $request
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @return Response
+     */
+    public function gitResetAction(Request $request)
+    {
+        $exportInstructions = $request->get("exportInstructions");
+        $reset = $this->gitService->reset(
+            $exportInstructions,
+            $output,
+            $errorMessages
+        );
+
+        $responseContent = [
+            "result" => $reset === false ? 1 : 0,
+            "output" => $output,
+            "errors" => $reset === false ? $this->trans($errorMessages) : null
+        ];
+
+        $response = new Response(json_encode($responseContent));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/push", name="Administration_git_push")
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @return Response
+     */
+    public function gitPushAction()
+    {
+        $push = $this->gitService->push(
+            $output,
+            $errorMessages
+        );
+
+        $responseContent = [
+            "result" => $push === false ? 1 : 0,
+            "output" => $output,
+            "errors" => $push === false ? $this->trans($errorMessages) : null
+        ];
+
+        $response = new Response(json_encode($responseContent));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    /**
+     * @Route("/Administration/git/pull", name="Administration_git_pull")
+     * @param Request $request
+     * @Security("has_role('ROLE_SUPER_ADMIN')")
+     * @return Response
+     */
+    public function gitPullAction(Request $request)
+    {
+        $exportInstructions = $request->get("exportInstructions");
+        $pull = $this->gitService->pull(
+            $exportInstructions,
+            $output,
+            $errorMessages
+        );
+
+        $responseContent = [
+            "result" => $pull === false ? 1 : 0,
+            "output" => $output,
+            "errors" => $pull === false ? $this->trans($errorMessages) : null
+        ];
+
+        $response = new Response(json_encode($responseContent));
+        $response->headers->set('Content-Type', 'application/json');
+        return $response;
+    }
+
+    protected function trans($messages, $domain = null)
+    {
+        if (!$messages) return $messages;
+        if (is_array($messages)) {
+            foreach ($messages as &$message) {
+                $message = $this->translator->trans($message, [], $domain);
+            }
+            return $messages;
+        }
+        return $this->translator->trans($messages, [], $domain);
+    }
 }

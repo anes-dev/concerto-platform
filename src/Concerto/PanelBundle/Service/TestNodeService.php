@@ -8,6 +8,7 @@ use Concerto\PanelBundle\Entity\TestNode;
 use Concerto\PanelBundle\Entity\Test;
 use Concerto\PanelBundle\Repository\TestRepository;
 use Concerto\PanelBundle\Security\ObjectVoter;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -23,9 +24,9 @@ class TestNodeService extends ASectionService
     private $testVariableService;
     private $testRepository;
 
-    public function __construct(TestNodeRepository $repository, ValidatorInterface $validator, TestNodePortService $portService, TestVariableService $variableService, TestRepository $testRepository, AuthorizationCheckerInterface $securityAuthorizationChecker)
+    public function __construct(TestNodeRepository $repository, ValidatorInterface $validator, TestNodePortService $portService, TestVariableService $variableService, TestRepository $testRepository, AuthorizationCheckerInterface $securityAuthorizationChecker, TokenStorageInterface $securityTokenStorage)
     {
-        parent::__construct($repository, $securityAuthorizationChecker);
+        parent::__construct($repository, $securityAuthorizationChecker, $securityTokenStorage);
 
         $this->testNodePortService = $portService;
         $this->testVariableService = $variableService;
@@ -47,16 +48,13 @@ class TestNodeService extends ASectionService
         return $this->authorizeCollection($this->repository->findByFlowTest($test_id));
     }
 
-    public function save(User $user, $object_id, $type, $posX, $posY, Test $flowTest, Test $sourceTest, $title, $flush = true)
+    public function save($object_id, $type, $posX, $posY, Test $flowTest, Test $sourceTest, $title, $flush = true)
     {
         $errors = array();
         $object = $this->get($object_id);
-        $is_new = false;
         if ($object === null) {
             $object = new TestNode();
-            $is_new = true;
         }
-        $object->setUpdated();
         $object->setType($type);
         $object->setPosX($posX);
         $object->setPosY($posY);
@@ -70,30 +68,45 @@ class TestNodeService extends ASectionService
         if (count($errors) > 0) {
             return array("object" => null, "errors" => $errors);
         }
-        $this->repository->save($object, $flush);
-
-        $this->savePorts($user, $object, $type, $sourceTest, $flush);
+        $this->update($object, $flush);
 
         return array("object" => $object, "errors" => $errors);
     }
 
-    public function savePorts(User $user, TestNode $node, $type, Test $sourceTest, $flush = true)
+    public function update(TestNode $object, $flush = true)
     {
-        switch ($type) {
+        $user = null;
+        $token = $this->securityTokenStorage->getToken();
+        if ($token !== null) $user = $token->getUser();
+
+        $object->setUpdated();
+        $object->setUpdatedBy($user);
+        $this->repository->save($object, $flush);
+        $this->onObjectSaved($object, $flush);
+    }
+
+    private function onObjectSaved(TestNode $object, $flush = true)
+    {
+        $this->savePorts($object, $flush);
+    }
+
+    private function savePorts(TestNode $node, $flush = true)
+    {
+        switch ($node->getType()) {
             case self::TYPE_BEGIN_TEST:
                 $params = array();
-                $returns = $this->testVariableService->getParameters($sourceTest->getId());
+                $returns = $this->testVariableService->getParameters($node->getSourceTest()->getId());
                 $outs = array();
                 break;
             case self::TYPE_FINISH_TEST:
-                $params = $this->testVariableService->getReturns($sourceTest->getId());
+                $params = $this->testVariableService->getReturns($node->getSourceTest()->getId());
                 $returns = array();
                 $outs = array();
                 break;
             default:
-                $params = $this->testVariableService->getParameters($sourceTest->getId());
-                $returns = $this->testVariableService->getReturns($sourceTest->getId());
-                $outs = $this->testVariableService->getBranches($sourceTest->getId());
+                $params = $this->testVariableService->getParameters($node->getSourceTest()->getId());
+                $returns = $this->testVariableService->getReturns($node->getSourceTest()->getId());
+                $outs = $this->testVariableService->getBranches($node->getSourceTest()->getId());
                 break;
         }
 
@@ -101,13 +114,10 @@ class TestNodeService extends ASectionService
 
         foreach ($vars as $collection) {
             foreach ($collection as $var) {
-                $value = $var->getValue();
-                if ($value) {
-                    $value = '"' . addslashes($var->getValue()) . '"';
-                }
                 $port = $this->testNodePortService->getOneByNodeAndVariable($node, $var);
                 if (!$port) {
-                    $result = $this->testNodePortService->save($user, 0, $node, $var, "1", $var->getValue(), "1", $flush);
+                    $exposed = $var->getType() == 2;
+                    $result = $this->testNodePortService->save(0, $node, $var, "1", $var->getValue(), "1", null, false, $exposed, null, null, null, $flush);
                     $node->addPort($result["object"]);
                 }
             }
@@ -129,7 +139,7 @@ class TestNodeService extends ASectionService
         return $result;
     }
 
-    public function importFromArray(User $user, $instructions, $obj, &$map, &$queue)
+    public function importFromArray($instructions, $obj, &$map, &$renames, &$queue)
     {
         $pre_queue = array();
         if (!array_key_exists("TestNode", $map))
@@ -170,7 +180,7 @@ class TestNodeService extends ASectionService
             $map["TestNode"]["id" . $obj["id"]] = $src_ent;
             $result = array("errors" => null, "entity" => $src_ent);
         } else
-            $result = $this->importNew($user, null, $obj, $map, $queue, $flowTest, $sourceTest);
+            $result = $this->importNew(null, $obj, $map, $queue, $flowTest, $sourceTest);
 
         array_splice($queue, 1, 0, $obj["ports"]);
 
@@ -178,7 +188,6 @@ class TestNodeService extends ASectionService
     }
 
     /* TODO: improve it, curretly it's not 100% reliable (for nodes with same position) */
-
     protected function findConversionSource($obj, $map)
     {
         $ent = $this->repository->findOneBy(array(
@@ -191,14 +200,20 @@ class TestNodeService extends ASectionService
         return $this->get($ent->getId());
     }
 
-    protected function importNew(User $user, $new_name, $obj, &$map, &$queue, $flowTest, $sourceTest)
+    protected function importNew($new_name, $obj, &$map, &$queue, $flowTest, $sourceTest)
     {
+        $user = null;
+        $token = $this->securityTokenStorage->getToken();
+        if ($token !== null) $user = $token->getUser();
+
         $ent = new TestNode();
         $ent->setFlowTest($flowTest);
         $ent->setPosX($obj["posX"]);
         $ent->setPosY($obj["posY"]);
         $ent->setSourceTest($sourceTest);
         $ent->setType($obj["type"]);
+        $ent->setUpdated();
+        $ent->setUpdatedBy($user);
         if (array_key_exists("title", $obj))
             $ent->setTitle($obj["title"]);
         $ent_errors = $this->validator->validate($ent);
@@ -209,6 +224,7 @@ class TestNodeService extends ASectionService
         if (count($ent_errors_msg) > 0) {
             return array("errors" => $ent_errors_msg, "entity" => null, "source" => $obj);
         }
+        //shouldn't be update because it will lead to redundant ports
         $this->repository->save($ent, false);
         $map["TestNode"]["id" . $obj["id"]] = $ent;
         return array("errors" => null, "entity" => $ent);
@@ -223,4 +239,17 @@ class TestNodeService extends ASectionService
         return null;
     }
 
+    public function exposePorts($ports)
+    {
+        $this->testNodePortService->exposePorts($ports);
+    }
+
+    public function addDynamicPort($object_id, $name, $type)
+    {
+        return $this->testNodePortService->addDynamic(
+            $this->get($object_id),
+            $name,
+            $type
+        );
+    }
 }

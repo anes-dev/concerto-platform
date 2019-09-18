@@ -68,7 +68,7 @@ class Test extends ATopEntity implements \JsonSerializable
 
     /**
      * @var string
-     * @ORM\Column(type="text")
+     * @ORM\Column(type="text", nullable=true)
      */
     private $code;
 
@@ -93,13 +93,6 @@ class Test extends ATopEntity implements \JsonSerializable
     private $sourceForNodes;
 
     /**
-     *
-     * @var boolean
-     * @ORM\Column(type="boolean")
-     */
-    private $outdated;
-
-    /**
      * @var TestWizard
      * @ORM\ManyToOne(targetEntity="TestWizard", inversedBy="resultingTests")
      */
@@ -121,6 +114,12 @@ class Test extends ATopEntity implements \JsonSerializable
     private $owner;
 
     /**
+     * @var string
+     * @ORM\Column(type="text", nullable=true)
+     */
+    private $configOverride;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -133,9 +132,7 @@ class Test extends ATopEntity implements \JsonSerializable
         $this->nodes = new ArrayCollection();
         $this->nodesConnections = new ArrayCollection();
         $this->sourceForNodes = new ArrayCollection();
-        $this->code = "";
         $this->description = "";
-        $this->outdated = false;
         $this->slug = md5(mt_rand() . uniqid(true));
         $this->sourceWizard = null;
     }
@@ -197,6 +194,29 @@ class Test extends ATopEntity implements \JsonSerializable
     }
 
     /**
+     * Set config override
+     *
+     * @param string $config
+     * @return Test
+     */
+    public function setConfigOverride($config)
+    {
+        $this->configOverride = $config;
+
+        return $this;
+    }
+
+    /**
+     * Get config override
+     *
+     * @return string
+     */
+    public function getConfigOverride()
+    {
+        return $this->configOverride;
+    }
+
+    /**
      * Set description
      *
      * @param string $description
@@ -217,26 +237,6 @@ class Test extends ATopEntity implements \JsonSerializable
     public function getDescription()
     {
         return $this->description;
-    }
-
-    /**
-     * Is newer version of source test available?
-     *
-     * @return boolean
-     */
-    public function isOutdated()
-    {
-        return $this->outdated;
-    }
-
-    /**
-     * Set if newer version of source test is available.
-     *
-     * @param boolean $outdated
-     */
-    public function setOutdated($outdated)
-    {
-        $this->outdated = $outdated;
     }
 
     /**
@@ -580,6 +580,7 @@ class Test extends ATopEntity implements \JsonSerializable
     /**
      * Set owner
      * @param User $user
+     * @return Test
      */
     public function setOwner($user)
     {
@@ -596,6 +597,69 @@ class Test extends ATopEntity implements \JsonSerializable
     public function getOwner()
     {
         return $this->owner;
+    }
+
+    public function getDeepUpdated()
+    {
+        $max = $this->updated;
+        foreach ($this->nodes as $node) {
+            $max = max($max, $node->getDeepUpdated());
+        }
+        foreach ($this->nodesConnections as $connection) {
+            $max = max($max, $connection->getDeepUpdated());
+        }
+        foreach ($this->variables as $variable) {
+            $max = max($max, $variable->getDeepUpdated());
+        }
+        return $max;
+    }
+
+    public function getDeepUpdatedBy()
+    {
+        $updatedBy = $this->updatedBy;
+        $max = $this->updated;
+        foreach ($this->getNodes() as $node) {
+            $val = $node->getDeepUpdated();
+            $max = max($max, $val);
+            if ($val == $max) {
+                $updatedBy = $node->getDeepUpdatedBy();
+            }
+        }
+        foreach ($this->getNodesConnections() as $connection) {
+            $val = $connection->getDeepUpdated();
+            $max = max($max, $val);
+            if ($val == $max) {
+                $updatedBy = $connection->getDeepUpdatedBy();
+            }
+        }
+        foreach ($this->getVariables() as $variable) {
+            $val = $variable->getDeepUpdated();
+            $max = max($max, $val);
+            if ($val == $max) {
+                $updatedBy = $variable->getDeepUpdatedBy();
+            }
+        }
+        return $updatedBy;
+    }
+
+    public function getLockBy()
+    {
+        $lockedBy = parent::getLockBy();
+        if ($lockedBy) return $lockedBy;
+
+        /** @var TestNode $node */
+        foreach ($this->getNodes() as $node) {
+            if ($node->getType() == 0) {
+                $lockedBy = $node->getSourceTest()->getLockBy();
+                if ($lockedBy) return $lockedBy;
+            }
+        }
+
+        if ($this->getSourceWizard()) {
+            $lockedBy = $this->getSourceWizard()->getLockBy();
+            if ($lockedBy) return $lockedBy;
+        }
+        return null;
     }
 
     public static function getArrayHash($arr)
@@ -628,14 +692,14 @@ class Test extends ATopEntity implements \JsonSerializable
         return "Test (name:" . $this->getName() . ")";
     }
 
-    public function jsonSerialize(&$dependencies = array())
+    public function jsonSerialize(&$dependencies = array(), &$normalizedIdsMap = null)
     {
         if (self::isDependencyReserved($dependencies, "Test", $this->id))
             return null;
         self::reserveDependency($dependencies, "Test", $this->id);
 
         if ($this->sourceWizard != null)
-            $this->sourceWizard->jsonSerialize($dependencies);
+            $this->sourceWizard->jsonSerialize($dependencies, $normalizedIdsMap);
 
         $serialized = array(
             "class_name" => "Test",
@@ -647,24 +711,31 @@ class Test extends ATopEntity implements \JsonSerializable
             "type" => $this->type,
             "code" => $this->code,
             "slug" => $this->slug,
-            "outdated" => $this->outdated ? "1" : "0",
             "description" => $this->description,
-            "variables" => self::jsonSerializeArray($this->variables->toArray(), $dependencies),
+            "variables" => self::jsonSerializeArray($this->variables->toArray(), $dependencies, $normalizedIdsMap),
             "logs" => $this->logs->toArray(),
             "sourceWizard" => $this->sourceWizard != null ? $this->sourceWizard->getId() : null,
             "sourceWizardName" => $this->sourceWizard != null ? $this->sourceWizard->getName() : null,
             "sourceWizardTest" => $this->sourceWizard != null ? $this->sourceWizard->getTest()->getId() : null,
             "sourceWizardTestName" => $this->sourceWizard != null ? $this->sourceWizard->getTest()->getName() : null,
-            "steps" => self::jsonSerializeArray($this->sourceWizard ? $this->sourceWizard->getSteps()->toArray() : [], $dependencies),
-            "updatedOn" => $this->updated->format("Y-m-d H:i:s"),
-            "updatedBy" => $this->updatedBy,
-            "nodes" => self::jsonSerializeArray($this->getNodes()->toArray(), $dependencies),
-            "nodesConnections" => self::jsonSerializeArray($this->getNodesConnections()->toArray(), $dependencies),
+            "steps" => self::jsonSerializeArray($this->sourceWizard ? $this->sourceWizard->getSteps()->toArray() : [], $dependencies, $normalizedIdsMap),
+            "updatedOn" => $this->getDeepUpdated()->getTimestamp(),
+            "updatedBy" => $this->getDeepUpdatedBy(),
+            "lockedBy" => $this->getLockBy() ? $this->getLockBy()->getId() : null,
+            "directLockBy" => $this->getDirectLockBy() ? $this->getDirectLockBy()->getId() : null,
+            "nodes" => self::jsonSerializeArray($this->getNodes()->toArray(), $dependencies, $normalizedIdsMap),
+            "nodesConnections" => self::jsonSerializeArray($this->getNodesConnections()->toArray(), $dependencies, $normalizedIdsMap),
             "tags" => $this->tags,
             "owner" => $this->getOwner() ? $this->getOwner()->getId() : null,
             "groups" => $this->groups,
             "starterContent" => $this->starterContent
         );
+
+        if ($normalizedIdsMap !== null) {
+            $serialized["id"] = self::normalizeId("Test", $serialized["id"], $normalizedIdsMap);
+            $serialized["sourceWizard"] = self::normalizeId("TestWizard", $serialized["sourceWizard"], $normalizedIdsMap);
+            $serialized["sourceWizardTest"] = self::normalizeId("Test", $serialized["sourceWizardTest"], $normalizedIdsMap);
+        }
 
         self::addDependency($dependencies, $serialized);
         return $serialized;

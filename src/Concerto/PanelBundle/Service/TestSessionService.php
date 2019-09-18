@@ -9,7 +9,6 @@ use Concerto\PanelBundle\Repository\TestRepository;
 use Concerto\TestBundle\Service\ASessionRunnerService;
 use Psr\Log\LoggerInterface;
 use Concerto\PanelBundle\Entity\TestSessionLog;
-use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 class TestSessionService
 {
@@ -45,10 +44,9 @@ class TestSessionService
     private $secret;
     private $fileService;
     private $testRunnerSettings;
-    private $session;
     private $sessionRunnerService;
 
-    public function __construct($environment, TestSessionRepository $testSessionRepository, TestRepository $testRepository, TestSessionLogRepository $testSessionLogRepository, $secret, LoggerInterface $logger, FileService $fileService, $testRunnerSettings, SessionInterface $session, ASessionRunnerService $sessionRunnerService)
+    public function __construct($environment, TestSessionRepository $testSessionRepository, TestRepository $testRepository, TestSessionLogRepository $testSessionLogRepository, $secret, LoggerInterface $logger, FileService $fileService, $testRunnerSettings, ASessionRunnerService $sessionRunnerService)
     {
         $this->environment = $environment;
         $this->testSessionRepository = $testSessionRepository;
@@ -58,7 +56,6 @@ class TestSessionService
         $this->logger = $logger;
         $this->fileService = $fileService;
         $this->testRunnerSettings = $testRunnerSettings;
-        $this->session = $session;
         $this->sessionRunnerService = $sessionRunnerService;
     }
 
@@ -67,7 +64,7 @@ class TestSessionService
         return sha1(time() . "_" . $this->secret . "_" . $session_id);
     }
 
-    public function startNewSession($test_slug, $test_name, $params, $client_ip, $client_browser, $debug)
+    public function startNewSession($test_slug, $test_name, $params, $client_ip, $client_browser, $debug, $max_exec_time = null)
     {
         $this->logger->info(__CLASS__ . ":" . __FUNCTION__ . " - $test_slug, $test_name, $params, $client_ip, $client_browser, $debug");
 
@@ -95,7 +92,7 @@ class TestSessionService
         $session->setHash($hash);
         $this->testSessionRepository->save($session);
 
-        $response = $this->sessionRunnerService->startNew($session, $params, $client_ip, $client_browser, $debug);
+        $response = $this->sessionRunnerService->startNew($session, $params, $client_ip, $client_browser, $debug, $max_exec_time);
         return $this->prepareResponse($hash, $response);
     }
 
@@ -124,10 +121,9 @@ class TestSessionService
         return json_encode($result);
     }
 
-    public function setTemplateTimerValues(TestSession $session, $values, $time = null)
+    public function setTemplateTimerValues(TestSession $session, $values)
     {
-        if ($time === null) $time = microtime(true);
-        $values = json_decode($values, true);
+        $time = microtime(true);
 
         $timeLimit = $session->getTimeLimit();
         $timeTaken = $values["timeTaken"];
@@ -136,7 +132,7 @@ class TestSessionService
             $isTimeout = $values["isTimeout"];
         }
         if ($this->testRunnerSettings["timer_type"] == "server") {
-            $timeTaken = $time - $this->session->get("templateStartTime");
+            $timeTaken = $time - $session->getUpdated()->getTimestamp();
             if ($timeLimit > 0 && $timeTaken >= $timeLimit) {
                 $isTimeout = 1;
             }
@@ -147,12 +143,12 @@ class TestSessionService
 
         $values["timeTaken"] = $timeTaken;
         $values["isTimeout"] = $isTimeout;
-        return json_encode($values);
+        return $values;
     }
 
-    public function submit($session_hash, $values, $client_ip, $client_browser, $time)
+    public function submit($session_hash, $values, $client_ip, $client_browser)
     {
-        $this->logger->info(__CLASS__ . ":" . __FUNCTION__ . " - $session_hash, $values, $client_ip, $client_browser");
+        $this->logger->info(__CLASS__ . ":" . __FUNCTION__ . " - $session_hash, $client_ip, $client_browser");
 
         $session = $this->testSessionRepository->findOneBy(array("hash" => $session_hash));
         if (!$session) {
@@ -170,20 +166,20 @@ class TestSessionService
             ));
         }
 
-        $values = $this->setTemplateTimerValues($session, $values, $time);
+        $values = $this->setTemplateTimerValues($session, $values);
 
         $session->setClientIp($client_ip);
         $session->setClientBrowser($client_browser);
         $session->setUpdated();
         $this->testSessionRepository->save($session);
 
-        $response = $this->sessionRunnerService->submit($session, $values, $client_ip, $client_browser, $time);
+        $response = $this->sessionRunnerService->submit($session, $values, $client_ip, $client_browser);
         return $this->prepareResponse($session_hash, $response);
     }
 
-    public function backgroundWorker($session_hash, $values, $client_ip, $client_browser, $time)
+    public function backgroundWorker($session_hash, $values, $client_ip, $client_browser)
     {
-        $this->logger->info(__CLASS__ . ":" . __FUNCTION__ . " - $session_hash, $values, $client_ip, $client_browser");
+        $this->logger->info(__CLASS__ . ":" . __FUNCTION__ . " - $session_hash, $client_ip, $client_browser");
 
         $session = $this->testSessionRepository->findOneBy(array("hash" => $session_hash));
         if (!$session) {
@@ -201,14 +197,14 @@ class TestSessionService
             ));
         }
 
-        $values = $this->setTemplateTimerValues($session, $values, $time);
+        $values = $this->setTemplateTimerValues($session, $values);
 
         $session->setClientIp($client_ip);
         $session->setClientBrowser($client_browser);
         $session->setUpdated();
         $this->testSessionRepository->save($session);
 
-        $response = $this->sessionRunnerService->backgroundWorker($session, $values, $client_ip, $client_browser, $time);
+        $response = $this->sessionRunnerService->backgroundWorker($session, $values, $client_ip, $client_browser);
         return $this->prepareResponse($session_hash, $response);
     }
 
@@ -280,17 +276,15 @@ class TestSessionService
             ));
         }
 
-        //@TODO unify response
-        $response = array("result" => -1);
-        foreach ($files as $file) {
-            $upload_result = $this->fileService->moveUploadedFile($file->getRealPath(), FileService::DIR_PRIVATE, $file->getClientOriginalName(), $message);
-            if ($upload_result)
-                $response = array("result" => 0, "file_path" => realpath($this->fileService->getPrivateUploadDirectory() . $file->getClientOriginalName()), "name" => $name);
-            else {
-                $response = array("result" => -1, "error" => $message);
+        $message = "";
+        $upload_result = $this->fileService->uploadFiles(FileService::DIR_SESSION, "", $files, $message, $session_hash);
+        if ($upload_result) {
+            foreach ($files as $file) {
+                $response = array("result" => 0, "file_path" => realpath($this->fileService->getSessionUploadDirectory($session_hash) . $file->getClientOriginalName()), "name" => $name);
                 return $response;
             }
         }
+        $response = array("result" => -1, "error" => $message);
         return $response;
     }
 

@@ -6,6 +6,29 @@ form:
         session_limit.tooltip: Maksymalna dostępna liczba równoczesnych sesji testów.
         api_enabled: API włączone
         api_enabled.tooltip: Włącz API
+        session_runner_service: Serwis obsługi sesji
+        session_runner_service.tooltip: |
+            Może być jednym z dwojga:
+            <ul>
+                <li>
+                    Stały
+                    <ul>
+                        <li><strong>bardzo wysokie</strong> zużycie RAM</li>
+                        <li>nieco zmniejszone zużycie CPU</li>
+                        <li>nieco szybszy</li>
+                        <li>zezwala na testy czysto-kodowe z wysyłaniem stron</li>
+                    </ul>
+                </li>
+                <li>
+                    Zserializowany (zalecany)
+                    <ul>
+                        <li><strong>bardzo niskie</strong> zużycie RAM</li>
+                        <li>nieco zwiększone zużycie CPU</li>
+                        <li>nieco wolniejszy</li>
+                        <li>wymusza wyświetlanie szablonów poprzez węzły</li>
+                    </ul>
+                </li>
+            </ul>
         
 messages:
     fieldset:
@@ -34,6 +57,132 @@ messages:
         message:
             delete: Jesteś pewien, że chcesz usunąć wybrane wiadomości?
             clear: Jesteś pewien, że chcesz usunąć wszystkie wiadomości?
+
+content:
+    fieldset:
+        legend: Zawartość
+        legend.tooltip: Import i eksport zawartości
+    git: Git
+    import: Import
+    export: Eksport
+    last_import_time: Czas ostatniego importu
+    last_import_time.tooltip: Czas ostatniej akcji pomyślnego importu
+    url: URL
+    url.tooltip: |
+        URL z którego należy pobrać zawartość do pobrania. Może być jednym z:
+        <ul>
+            <li>zdalny URL wskazujący na jedno-plikowy eksport (może być zip); jedynie protokoły HTTP i HTTPS są dozwolone</li>
+            <li>ścieżka plików; może wskazywać na katalog lub plik eksportu (zip dozwolony); <strong>.</strong> wskaże na katalog z domyślną startową zawartością</li>
+        </ul>
+    file: Plik
+    file.tooltip: Wysyłalny plik eksportu. Gdy zostanie wysłany, pole \'URL\' będzie ignorowane.
+    clear: usuń
+    import_options: Opcje importu
+    import_options.tooltip: |
+        Zawiera specyficzne dla obiektu opcje importu. Np. aby podmienić dane w tabeli danych na te z pliku importu:
+        <pre>[
+            {
+                "class_name": "DataTable",
+                "name": "MyTableName",
+                "data": 2
+            }
+        ]</pre>
+    export_options: Opcje eksportu
+    export_options.tooltip: |
+        Zawiera specyficzne dla obiektu opcje eksportu. Np. aby dołączyć dane tabeli w pliku eksportu:
+        <pre>[
+            {
+                "class_name": "DataTable",
+                "name": "MyTableName",
+                "data": 2
+            }
+        ]</pre>
+    import_from_file: Zawartość zostanie zaimportowana z wysłanego pliku w polu 'Plik'.
+    import_from_url: Zawartość zostanie zaimportowana z pola 'URL'.
+    importing_content: Importowanie zawartości
+    import_prompt: Jesteś pewien, że chcesz zaimportować zawartość? Tej operacji nie można cofnąć. Upewnij się, że posiadasz kopie zapasową swojej obecnej zawartości zanim kontynuujesz.
+    import_success: Import zakończony pomyślnie
+    import_failure: Import nie powiódł się
+
+git:
+    manage: Zarządzanie integracją Git
+    not_enabled: Nie włączona
+    status:
+        behind: "Commity do tyłu:"
+        ahead: "Commity do przodu:"
+        local_changes: "Lokalne zmiany:"
+        local_changes.no_changes: "Brak zmian"
+        local_changes.uncommitted_changes: "Nie zcommitowane zmiany"
+    settings:
+        content_options: "Opcje zawartości:"
+        content_options.tooltip: |
+            Można tutaj ustalić opcje zawartości. Np aby dołączyć dane tabeli danych do operacji Git, należy ustalić wartość na:
+            <pre>[
+                {
+                    "class_name": "DataTable",
+                    "name": "MyTableName",
+                    "data": 2
+                }
+            ]</pre>
+    history:
+        title: Historia
+        no_commits: Brak commitów na ten moment
+        list:
+            sha: SHA
+            committer: Commitujący
+            time_ago: Czas temu
+            subject: Temat
+            ref: Ref
+    enable:
+        title: Włączenie Git
+        title.tooltip: Włącza integracje Git i klonuje repozytorium Git. Włączenie Git nie zmodyfikuje jeszcze twojej zawartości.
+        url: "URL:"
+        url.tooltip: URL repozytorium Git
+        branch: "Gałąź:"
+        branch.tooltip: Nazwa gałęzi repozytorium Git
+        login: "Login:"
+        login.tooltip: Login użytkownika Git
+        password: "Hasło:"
+        password.tooltip: Hasło użytkownika Git
+        success: Git włączony
+        failure: Nie powiodło się włączanie Git
+        button: Włącz
+    disable:
+        title: Wyłączania Git
+        confirm: Napewno wyłączyć integracje Git?
+        button: Wyłącz
+    diff:
+        sha: "{0} diff"
+        local: Diff kopii roboczej
+    refresh:
+        title: Odświeżanie statusu Git
+        button: Odśwież
+    commit:
+        title: Commitowanie zmian
+        title.tooltip: Commituje lokalne zmiany
+        message: Wiadomość
+        message.tooltip: Wiadomość commitu Git, która będzie widoczna w historii.
+        success: Zmiany commitowane
+        failure: Commit Git się nie powiódł
+        button: Commit
+    reset:
+        title: Reset kopii roboczej
+        confirm: Zresetuje to twoją kopię roboczą do ostatniego commitu. Nie usunię to nowo dodanych najwyższych obiektów. Napewno kontynuować?
+        success: Kopia robocza zresetowana
+        failure: Nie udało sie zresetować kopii roboczej
+        button: Reset
+    push:
+        title: Pchnięcie lokalnych commitów do zdalnego repozytorium
+        confirm: Napewno pchać lokalne commity do zdalnego repozytorium?
+        success: Commity pchnięte
+        failure: Nie udało się pchnąc lokalnych commitów
+        button: Pchnij
+    pull:
+        title: Pobieranie commitów ze zdalnego repozytorium
+        confirm: Napewno pobrać commity ze zdalnego repozytorium?
+        success: Commity pobrane
+        failure: Nie udało się pobrać commitów ze zdalnego repozytorium
+        button: Pobierz
         
 usage_charts:
     fieldset:
@@ -86,29 +235,9 @@ packages:
             cancel: Anuluj
         
 tasks:
-    fieldset:
-        legend: Zaplanowane zadania
-        legend.tooltip: Zaplanowane systemowe zadania
-    current_platform_v: 'Obecna wersja platformy:'
-    available_platform_v: 'Dostępna wersja platformy:'
-    current_content_v: 'Obecna wersja zawartości:'
-    available_content_v: 'Dostępna wersja zawartości:'
-    backup_platform_v: 'Wersja kopii platformy:'
-    backup_content_v: 'Wersja kopii zawartości:'
-    version_none: żadna
-    buttons:
-        upgrade: Aktualizuj
-        backup: Kopia zapasowa
-        restore: Przywróć kopie
     list:
         fields:
             updated: Zaktualizowane
-            type: Typ
-            type.platform_upgrade: Aktualizacja Platformy
-            type.content_upgrade: Aktualizacja Zawartości
-            type.restore_backup: Odtwórz Kopię
-            type.backup: Kopia Zapasowa
-            type.r_package_install: Instalacja Pakietu R
             status: Status
             status.pending: W kolejce
             status.ongoing: Trwa
@@ -118,24 +247,8 @@ tasks:
             description: Opis
             output: Wyjście
     dialog:
-        title:
-            backup: Kopia zapasowa
-            backup.failed: Kopia zapawowa zakończona niepowodzeniem
-            restore: Przywracanie kopii zapasowej
-            restore.failed: Przewracanie kopii zapasowej zakończone niepowodzeniem
-            content_upgrade: Aktualzacja zawartości
-            content_upgrade.failed: Aktualizacja zawartości zakończona niepowodzeniem
-            platform_upgrade: Aktualizacja platformy
-            platform_upgrade.failed: Aktualizacja platformy zakończona niepowodzeniem
-        confirm: 
-            backup: Jesteś pewien, że chcesz dokonać kopii zapasowej Concerto Platform? Jakalowiek poprzednia kopia zapasowa zostanie bezpowrotnie zastąpiona.
-            restore: Jesteś pewien, że chcesz przywrócić kopię zapasową? Zostanie przywrócony stan platformy z momentu dokonania kopii zapasowej zastępując obecny. Ta operacja jest nieodwracalna.
-            content_upgrade: Jesteś pewien, że chcesz dokonać aktualizacji zawartości?
-            platform_upgrade: Jesteś pewien, że chcesz dokonać aktualizacji platformy?
         content:
             busy: Obecnie już trwają lub są zaplanowane zadania.
-        fields:
-            backup: Zrób kopię zapasową i użyj jej jako punktu przywrócenia w wypadku gdy to zadanie się nie powiedzie.
         
 api_clients:
     fieldset:

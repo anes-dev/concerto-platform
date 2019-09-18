@@ -11,7 +11,7 @@
     </div>
     <div id="flowContainerScroll" oncontextmenu="return false;">
         <div id="flowContainerWrapper">
-            <div id="flowContainer" context-menu="onFlowCtxOpened()" data-target="menu-flow" tabindex="0" context-menu-disabled="disableContextMenu || (object.starterContent && !administrationSettingsService.starterContentEditable)" ng-class="{'cursor-resize':rectangleSelectionActive, 'cursor-move': movingActive}">
+            <div id="flowContainer" context-menu="onFlowCtxOpened()" data-target="menu-flow" tabindex="0" context-menu-disabled="disableContextMenu || !isEditable()" ng-class="{'cursor-resize':rectangleSelectionActive, 'cursor-move': movingActive}">
                 <div id="selection-rectangle" hidden></div>
             </div>
         </div>
@@ -20,8 +20,6 @@
     <div class="dropdown ctx-menu" id="menu-node">
         <ul class="dropdown-menu ctx-menu-ul" role="menu">
             <li class="ctx-element ctx-action ctx-action-active" ng-click="editNodeTitle(collectionService.getNode(nodeContext.id))">{{ "flow.buttons.rename_node"|trans }}</li>
-            <li class="ctx-element ctx-action ctx-action-active" ng-click="exportTest(nodeContext.id)" ng-show="selectedNodeIds.length <= 1">{{ "flow.buttons.export_test"|trans }}</li>
-            <li class="ctx-element ctx-action ctx-action-active" ng-click="exportTest(nodeContext.id)" ng-show="selectedNodeIds.length > 1">{{ "flow.buttons.export_tests"|trans }}</li>
             <li class="ctx-element ctx-action ctx-action-active" ng-click="copyNode(nodeContext.id)" ng-show="selectedNodeIds.length <= 1">{{ "flow.buttons.copy_node"|trans }}</li>
             <li class="ctx-element ctx-action ctx-action-active" ng-click="copyNode(nodeContext.id)" ng-show="selectedNodeIds.length > 1">{{ "flow.buttons.copy_nodes"|trans }}</li>            
             <li class="ctx-element ctx-action ctx-action-active" ng-click="removeNode(nodeContext.id)" ng-show="selectedNodeIds.length <= 1">{{ "flow.buttons.remove_node"|trans }}</li>

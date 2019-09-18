@@ -1,9 +1,10 @@
 function TestWizardCarouselStepController($scope, $http, $filter, TestWizardParam) {
-
-    $scope.savePath = Paths.TEST_WIZARD_PARAM_SAVE;
     $scope.testWizardParamsService = TestWizardParam;
-
     $scope.values = {};
+
+    $scope.filterByGuiEligible = function (obj) {
+        return typeof (obj.exposed) === 'undefined' || obj.exposed == 0;
+    };
 
     $scope.mapParamsValue = function () {
         $scope.values = {};

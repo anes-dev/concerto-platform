@@ -1,6 +1,9 @@
 function PortValueEditController($scope, $uibModalInstance, $timeout, $http, RDocumentation, object, editable) {
   $scope.object = object;
   $scope.editable = editable;
+  $scope.removable = $scope.canRemovePort($scope.collectionService.getNode(object.node), object);
+  $scope.connected = $scope.isPortConnected(object);
+  $scope.canBePointer = !$scope.connected || object.type == 1;
 
   $scope.codeOptions = {
     lineWrapping: true,
@@ -24,10 +27,10 @@ function PortValueEditController($scope, $uibModalInstance, $timeout, $http, RDo
     }
   };
   if (RDocumentation.functionIndex === null) {
-    $http.get(RDocumentation.rCacheDirectory + 'functionIndex.json').success(function (data) {
-      if (data !== null) {
-        RDocumentation.functionIndex = data;
-        $scope.codeOptions.hintOptions.functionIndex = data;
+    $http.get(RDocumentation.rCacheDirectory + 'functionIndex.json').then(function (httpResponse) {
+      if (httpResponse.data !== null) {
+        RDocumentation.functionIndex = httpResponse.data;
+        $scope.codeOptions.hintOptions.functionIndex = httpResponse.data;
       }
     });
   } else {
@@ -36,12 +39,32 @@ function PortValueEditController($scope, $uibModalInstance, $timeout, $http, RDo
 
   $scope.change = function () {
     $scope.object.defaultValue = "0";
-    $uibModalInstance.close($scope.object);
+    $uibModalInstance.close({
+      action: "save",
+      object: $scope.object
+    });
+  };
+
+  $scope.hide = function() {
+    $uibModalInstance.close({
+      action: "hide",
+      object: $scope.object
+    });
+  };
+
+  $scope.removeAllConnections = function() {
+    $uibModalInstance.close({
+      action: "removeConnections",
+      object: $scope.object
+    });
   };
 
   $scope.reset = function () {
     $scope.object.defaultValue = "1";
-    $uibModalInstance.close($scope.object);
+    $uibModalInstance.close({
+      action: "save",
+      object: $scope.object
+    });
   };
 
   $scope.cancel = function () {

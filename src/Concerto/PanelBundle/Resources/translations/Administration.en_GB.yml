@@ -6,6 +6,29 @@ form:
         session_limit.tooltip: Maximum allowed number of simultaneous test sessions.
         api_enabled: API enabled
         api_enabled.tooltip: Enable API requests
+        session_runner_service: Session runner service
+        session_runner_service.tooltip: |
+            Can be one of two:
+            <ul>
+                <li>
+                    Persistent
+                    <ul>
+                        <li><strong>very high</strong> RAM usage</li>
+                        <li>slighlty decreased CPU usage</li>
+                        <li>slightly faster</li>
+                        <li>allows pure code tests with page submits</li>
+                    </ul>
+                </li>
+                <li>
+                    Serialized (recommended)
+                    <ul>
+                        <li><strong>very low</strong> RAM usage</li>
+                        <li>slighlty increased CPU usage</li>
+                        <li>slightly slower</li>
+                        <li>requires templates to be shown through flow nodes only</li>
+                    </ul>
+                </li>
+            </ul>
         
 messages:
     fieldset:
@@ -34,6 +57,132 @@ messages:
         message:
             delete: Are you sure you want to remove selected message?
             clear: Are you sure you want to remove all messages?
+
+content:
+    fieldset:
+        legend: Content
+        legend.tooltip: Content import and export
+    git: Git
+    import: Import
+    export: Export
+    last_import_time: Last import time
+    last_import_time.tooltip: Time of last successful import action
+    url: URL
+    url.tooltip: |
+        URL to import from. Can be one of the following:
+        <ul>
+            <li>remote URL pointing to single file export (can be zipped); only HTTP or HTTPS protocols allowed</li>
+            <li>file path; can be directory or export file (zip allowed); <strong>.</strong> will point to default starter content directory</li>
+        </ul>
+    file: File
+    file.tooltip: Uploadable export file. When uploaded, \'URL\' field will be ignored.
+    clear: clear
+    import_options: Import options
+    import_options.tooltip: |
+        Can specify object specific import options. E.g. to replace data of content tables with data in import file:
+        <pre>[
+            {
+                "class_name": "DataTable",
+                "name": "MyTableName",
+                "data": 2
+            }
+        ]</pre>
+    export_options: Export options
+    export_options.tooltip: |
+        Can specify object specific export options. E.g. to include data table data in export file:
+        <pre>[
+            {
+                "class_name": "DataTable",
+                "name": "MyTableName",
+                "data": 2
+            }
+        ]</pre>
+    import_from_file: Content will be imported from uploaded file in 'File' field.
+    import_from_url: Content will be imported from 'URL' field.
+    importing_content: Importing content
+    import_prompt: Are you sure you want to import content? This is operation can not be undone. Please make sure you have a backup of your data in case anything goes wrong.
+    import_success: Import finished successfully
+    import_failure: Import failed
+
+git:
+    manage: Manage Git integration
+    not_enabled: Not enabled
+    status:
+        behind: "Commits behind:"
+        ahead: "Commits ahead:"
+        local_changes: "Local changes:"
+        local_changes.no_changes: "No changes"
+        local_changes.uncommitted_changes: "Uncommitted changes"
+    settings:
+        content_options: "Content options:"
+        content_options.tooltip: |
+            Can specify content options. E.g. to include data table data in git operations:
+            <pre>[
+                {
+                    "class_name": "DataTable",
+                    "name": "MyTableName",
+                    "data": 2
+                }
+            ]</pre>
+    history:
+        title: History
+        no_commits: No commits yet
+        list:
+            sha: SHA
+            committer: Committer
+            time_ago: Time ago
+            subject: Subject
+            ref: Ref
+    enable:
+        title: Enabling Git
+        title.tooltip: Enables Git integration and clones Git repository. Enabling Git won\'t modify your content yet.
+        url: "URL:"
+        url.tooltip: Git repository URL
+        branch: "Branch:"
+        branch.tooltip: Git repository branch name
+        login: "Login:"
+        login.tooltip: Git user login
+        password: "Password:"
+        password.tooltip: Git user password
+        success: Git enabled
+        failure: Failed enabling Git
+        button: Enable
+    disable:
+        title: Disabling Git
+        confirm: Are you sure you want to disable Git integration?
+        button: Disable
+    diff:
+        sha: "{0} diff"
+        local: Working copy diff
+    refresh:
+        title: Refreshing Git status
+        button: Refresh
+    commit:
+        title: Commiting changes
+        title.tooltip: Commits your local changes.
+        message: Message
+        message.tooltip: Git commit message that will be visible in your repository history.
+        success: Changes committed
+        failure: Git commit failed
+        button: Commit
+    reset:
+        title: Resetting working copy
+        confirm: This will reset your working copy to the state from latest commit. It will not remove newly added top objects. Are you sure you want to continue?
+        success: Working copy resetted
+        failure: Failed resetting working copy
+        button: Reset
+    push:
+        title: Pushing local commits to remote
+        confirm: Are you sure you want to push your local commits to remote?
+        success: Commits pushed
+        failure: Failed pushing local commits
+        button: Push
+    pull:
+        title: Pulling commits from remote
+        confirm: Are you sure you want to pull commits from remote?
+        success: Commits pulled
+        failure: Failed pulling commits from remote
+        button: Pull
         
 usage_charts:
     fieldset:
@@ -86,29 +235,9 @@ packages:
             cancel: Cancel
         
 tasks:
-    fieldset:
-        legend: Scheduled tasks
-        legend.tooltip: Sheduled system tasks
-    current_platform_v: 'Current platform version:'
-    available_platform_v: 'Available platform version:'
-    current_content_v: 'Current content version:'
-    available_content_v: 'Available content version:'
-    backup_platform_v: 'Backup platform version:'
-    backup_content_v: 'Backup content version:'
-    version_none: none
-    buttons:
-        upgrade: Upgrade
-        backup: Backup
-        restore: Restore
     list:
         fields:
             updated: Updated
-            type: Type
-            type.platform_upgrade: Platform Upgrade
-            type.content_upgrade: Content Upgrade
-            type.restore_backup: Restore Backup
-            type.backup: Backup
-            type.r_package_install: R Package Install
             status: Status
             status.pending: Pending
             status.ongoing: Ongoing
@@ -118,24 +247,8 @@ tasks:
             description: Description
             output: Output
     dialog:
-        title:
-            backup: Backup
-            backup.failed: Backup failed
-            restore: Backup restore
-            restore.failed: Restore failed
-            content_upgrade: Upgrade content
-            content_upgrade.failed: Content upgrade failed
-            platform_upgrade: Upgrade platform
-            platform_upgrade.failed: Platform upgrade failed
-        confirm: 
-            backup: Are you sure you want to backup Concerto Platform? It will replace any previous backup that was made.
-            restore: Are you sure you want to restore your backup? This will replace your current platform state with the state at the time of backup. This operation is irreversible.
-            content_upgrade: Are you sure you want to perform content upgrade?
-            platform_upgrade: Are you sure you want to perfrom platform upgrade?
         content:
             busy: There are already pending or ongoing scheduled tasks.
-        fields:
-            backup: Perform a backup and use it as a restore point in case when this task will fail.
             
 api_clients:
     fieldset:
